@@ -1,0 +1,1997 @@
+'use client';
+
+import React, { useState, useRef } from 'react';
+import { 
+  Camera, Upload, Video, Mic, Eye, Trash2, Download, FileText, CheckCircle, XCircle, AlertCircle,
+  Plus, Building, User, Calendar, MapPin, BarChart3, PieChart, TrendingUp, Clock, 
+  FileDown, Settings, Home, List, Dashboard, Save, RotateCcw, Bell, Shield, 
+  Database, Palette, Globe, Monitor, Smartphone, Tablet
+} from 'lucide-react';
+
+interface MediaFile {
+  id: string;
+  file: File;
+  type: 'image' | 'video' | 'audio';
+  url: string;
+  name: string;
+  size: number;
+}
+
+interface ChecklistItem {
+  id: number;
+  norma: string;
+  descricao: string;
+  condicao: 'C' | 'NC' | 'NA' | '';
+  po: 'C' | 'NC' | 'NA' | '';
+  fe: 'C' | 'NC' | 'NA' | '';
+  gsd: 'C' | 'NC' | 'NA' | '';
+  nper: 'C' | 'NC' | 'NA' | '';
+  comentario: string;
+  medias: MediaFile[];
+  selected: boolean; // Nova propriedade para seleção
+}
+
+interface Area {
+  id: string;
+  nome: string;
+  items: ChecklistItem[];
+}
+
+interface Inspecao {
+  id: string;
+  nome: string;
+  numeroContrato: string;
+  engenheiroResponsavel: string;
+  data: string;
+  areas: Area[];
+  status: 'Em Andamento' | 'Concluída' | 'Pendente';
+  createdAt: string;
+}
+
+interface ConfiguracaoSistema {
+  empresa: {
+    nome: string;
+    cnpj: string;
+    endereco: string;
+    telefone: string;
+    email: string;
+    logo: string;
+  };
+  relatorios: {
+    incluirFotos: boolean;
+    incluirComentarios: boolean;
+    formatoPadrao: 'PDF' | 'Excel' | 'Word';
+    assinaturasDigitais: boolean;
+    marcaDagua: boolean;
+  };
+  notificacoes: {
+    emailInspecaoConcluida: boolean;
+    emailPrazosVencimento: boolean;
+    lembreteManutencao: boolean;
+    alertasNaoConformidade: boolean;
+  };
+  sistema: {
+    tema: 'claro' | 'escuro' | 'auto';
+    idioma: 'pt-BR' | 'en-US' | 'es-ES';
+    autoSalvar: boolean;
+    backupAutomatico: boolean;
+    qualidadeFoto: 'alta' | 'media' | 'baixa';
+  };
+  seguranca: {
+    senhaObrigatoria: boolean;
+    tempoSessao: number;
+    logAuditoria: boolean;
+    criptografiaLocal: boolean;
+  };
+}
+
+const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'comentario' | 'medias' | 'selected'>[] = [
+  { id: 1, norma: "NR10.3.9-d", descricao: "A sala ou subestação está identificada? Item 10.10.1-c – NR-10" },
+  { id: 2, norma: "NR10.4.1", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir acidentes e outras ocorrências originadas por choque elétrico?" },
+  { id: 3, norma: "NR10.4.2", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir incêndios e explosões?" },
+  { id: 4, norma: "NR10.4.3", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir outros tipos de acidentes?" },
+  { id: 5, norma: "NR10.5.1", descricao: "As instalações elétricas devem ser mantidas em condições seguras de funcionamento?" },
+  { id: 6, norma: "NR10.5.2", descricao: "As instalações elétricas devem ser submetidas à manutenção preventiva e corretiva?" },
+  { id: 7, norma: "NR10.5.3", descricao: "As instalações elétricas devem ser inspecionadas e testadas de acordo com as regulamentações existentes?" },
+  { id: 8, norma: "NR10.6.1", descricao: "As instalações elétricas devem ser aterradas conforme regulamentação pertinente?" },
+  { id: 9, norma: "NR10.6.2", descricao: "O aterramento das instalações elétricas deve ser verificado periodicamente?" },
+  { id: 10, norma: "NR10.7.1", descricao: "Os equipamentos de proteção coletiva devem ser mantidos em perfeitas condições de uso?" },
+  { id: 11, norma: "NR10.7.2", descricao: "Os equipamentos de proteção individual devem ser adequados às atividades desenvolvidas?" },
+  { id: 12, norma: "NR10.8.1", descricao: "É proibido o uso de adornos pessoais nos trabalhos com instalações elétricas?" },
+  { id: 13, norma: "NR10.8.2", descricao: "Os trabalhadores devem usar equipamentos de proteção individual adequados?" },
+  { id: 14, norma: "NR10.9.1", descricao: "Em todos os serviços executados em instalações elétricas devem ser previstas e adotadas medidas de proteção?" },
+  { id: 15, norma: "NR10.9.2", descricao: "As medidas de proteção coletiva compreendem a desenergização elétrica?" },
+  { id: 16, norma: "NR10.9.3", descricao: "A desenergização elétrica deve ser efetuada conforme sequência apropriada?" },
+  { id: 17, norma: "NR10.10.1", descricao: "As áreas onde houver instalações ou equipamentos elétricos devem ser dotadas de proteção contra incêndio?" },
+  { id: 18, norma: "NR10.10.2", descricao: "Os materiais, peças, dispositivos, equipamentos e sistemas destinados à aplicação em instalações elétricas devem ser avaliados quanto à sua conformidade?" },
+  { id: 19, norma: "NR10.11.1", descricao: "Os trabalhadores autorizados a trabalhar em instalações elétricas devem ter treinamento específico?" },
+  { id: 20, norma: "NR10.11.2", descricao: "Os trabalhadores devem receber treinamento de reciclagem bienal?" },
+  { id: 21, norma: "NR10.12.1", descricao: "As empresas devem manter esquemas unifilares atualizados das instalações elétricas?" },
+  { id: 22, norma: "NR10.12.2", descricao: "As empresas devem manter especificações do sistema de aterramento?" },
+  { id: 23, norma: "NR10.12.3", descricao: "As empresas devem manter especificações dos dispositivos de proteção?" },
+  { id: 24, norma: "NR10.13.1", descricao: "As empresas devem implementar medidas de controle do risco elétrico?" },
+  { id: 25, norma: "NR10.13.2", descricao: "As medidas de controle devem integrar-se às demais iniciativas da empresa?" },
+  { id: 26, norma: "NR10.14.1", descricao: "Os trabalhadores devem interromper suas tarefas exercendo o direito de recusa?" },
+  { id: 27, norma: "NR10.14.2", descricao: "As situações que configurem risco grave e iminente devem ser comunicadas?" },
+  { id: 28, norma: "NR10.2.1", descricao: "Esta NR se aplica às fases de geração, transmissão, distribuição e consumo?" },
+  { id: 29, norma: "NR10.2.2", descricao: "Esta NR se aplica a todas as etapas de projeto, construção, montagem, operação, manutenção das instalações elétricas?" },
+  { id: 30, norma: "NR10.2.3", descricao: "Aplica-se a quaisquer trabalhos realizados nas suas proximidades?" },
+  { id: 31, norma: "NR10.3.1", descricao: "É de responsabilidade dos empregadores a implementação de medidas de controle?" },
+  { id: 32, norma: "NR10.3.2", descricao: "Cabe aos trabalhadores observar as normas de segurança?" },
+  { id: 33, norma: "NR10.3.3", descricao: "É responsabilidade dos contratantes manter os trabalhadores informados sobre os riscos?" },
+  { id: 34, norma: "NR10.3.4", descricao: "Cabe à empresa contratante garantir as mesmas condições de proteção?" },
+  { id: 35, norma: "NR10.3.5", descricao: "É de responsabilidade dos contratantes a adoção de medidas para que terceiros não autorizados não tenham acesso?" },
+  { id: 36, norma: "NR10.3.6", descricao: "Os trabalhadores devem ser qualificados ou capacitados?" },
+  { id: 37, norma: "NR10.3.7", descricao: "Os trabalhadores devem receber treinamento específico sobre os riscos?" },
+  { id: 38, norma: "NR10.3.8", descricao: "É vedado o trabalho em instalações elétricas energizadas em áreas classificadas?" },
+  { id: 39, norma: "NR10.3.9-a", descricao: "Somente serão consideradas desenergizadas as instalações elétricas liberadas para trabalho?" },
+  { id: 40, norma: "NR10.3.9-b", descricao: "As instalações devem estar com ausência de tensão?" },
+  { id: 41, norma: "NR10.3.9-c", descricao: "As instalações devem estar impedidas de energização?" },
+  { id: 42, norma: "NR10.3.9-e", descricao: "As instalações devem estar aterradas?" },
+  { id: 43, norma: "NR10.3.9-f", descricao: "As instalações devem estar protegidas dos elementos energizados existentes?" },
+  { id: 44, norma: "NR10.3.10", descricao: "O estado de instalação desenergizada deve ser mantido até a autorização para reenergização?" },
+  { id: 45, norma: "NR10.4.4", descricao: "As instalações elétricas devem ser construídas, montadas, operadas, reformadas, ampliadas, reparadas e inspecionadas de forma a garantir a segurança?" },
+  { id: 46, norma: "NR10.4.5", descricao: "Nos locais de trabalho só podem ser utilizados equipamentos, dispositivos e ferramentas elétricas compatíveis com a instalação elétrica existente?" },
+  { id: 47, norma: "NR10.5.4", descricao: "Os locais de serviços elétricos devem ser dotados de iluminação adequada?" },
+  { id: 48, norma: "NR10.5.5", descricao: "A iluminação de emergência deve ser prevista quando necessária?" },
+  { id: 49, norma: "NR10.6.3", descricao: "As partes das instalações elétricas sujeitas a influências externas devem ser dotadas de proteção?" },
+  { id: 50, norma: "NR10.6.4", descricao: "Os circuitos elétricos com finalidades diferentes devem ser identificados e instalados separadamente?" },
+  { id: 51, norma: "NR10.7.3", descricao: "As vestimentas de trabalho devem ser adequadas às atividades?" },
+  { id: 52, norma: "NR10.7.4", descricao: "É vedado o uso de vestimentas condutoras de eletricidade?" },
+  { id: 53, norma: "NR10.8.3", descricao: "Os trabalhadores com cabelos longos devem mantê-los presos?" },
+  { id: 54, norma: "NR10.8.4", descricao: "É vedado o porte de equipamentos que possam induzir energias eletrostáticas?" },
+  { id: 55, norma: "NR10.9.4", descricao: "Na impossibilidade de implementação do estabelecido no subitem 10.9.3, devem ser utilizadas outras medidas de proteção coletiva?" },
+  { id: 56, norma: "NR10.9.5", descricao: "Por fim, devem ser adotados equipamentos de proteção individual?" },
+  { id: 57, norma: "NR10.10.3", descricao: "Os estabelecimentos com carga instalada superior a 75 kW devem constituir e manter o Prontuário de Instalações Elétricas?" },
+  { id: 58, norma: "NR10.10.4", descricao: "As empresas que operam em instalações ou equipamentos integrantes do sistema elétrico de potência devem constituir Prontuário?" },
+  { id: 59, norma: "NR10.11.3", descricao: "Trabalhadores de empresas que interajam com o SEP devem ter treinamento específico?" },
+  { id: 60, norma: "NR10.11.4", descricao: "Os trabalhadores com atividades não relacionadas às instalações elétricas devem ser instruídos?" },
+  { id: 61, norma: "NR10.11.5", descricao: "Aqueles trabalhadores incumbidos de atividades em áreas onde houver instalações elétricas devem ser instruídos?" },
+  { id: 62, norma: "NR10.11.6", descricao: "Todo trabalhador em instalações elétricas energizadas em AT deve dispor de equipamento que permita a comunicação permanente?" },
+  { id: 63, norma: "NR10.11.7", descricao: "Os trabalhadores autorizados devem estar aptos a executar o resgate e prestar primeiros socorros?" },
+  { id: 64, norma: "NR10.11.8", descricao: "A empresa deve possuir métodos de resgate padronizados e adequados às suas atividades?" },
+  { id: 65, norma: "NR10.11.9", descricao: "Os trabalhadores autorizados devem receber treinamento específico em segurança?" },
+  { id: 66, norma: "NR10.12.4", descricao: "As empresas devem manter descrição dos procedimentos para emergências?" },
+  { id: 67, norma: "NR10.12.5", descricao: "As empresas devem manter certificações dos equipamentos de proteção coletiva e individual?" },
+  { id: 68, norma: "NR10.13.3", descricao: "As medidas de controle adotadas devem integrar-se às demais iniciativas da empresa?" },
+  { id: 69, norma: "NR10.13.4", descricao: "As empresas devem promover ações de controle do risco elétrico?" },
+  { id: 70, norma: "NR10.14.3", descricao: "A empresa deve promover a participação dos trabalhadores na implementação das medidas de proteção?" },
+  { id: 71, norma: "NR10.14.4", descricao: "Cabe aos trabalhadores exercer o direito de recusa ao trabalho?" },
+  { id: 72, norma: "NR10.15.1", descricao: "As atividades em instalações elétricas devem ser desenvolvidas por trabalhador qualificado ou capacitado?" },
+  { id: 73, norma: "NR10.15.2", descricao: "Entende-se como trabalhador qualificado aquele que comprovar conclusão de curso específico?" },
+  { id: 74, norma: "NR10.15.3", descricao: "É considerado trabalhador capacitado aquele que atenda às seguintes condições simultaneamente?" },
+  { id: 75, norma: "NR10.15.4", descricao: "São considerados autorizados os trabalhadores qualificados ou capacitados com anuência formal da empresa?" }
+];
+
+export default function InspecaoEletrica() {
+  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'selecionar-itens' | 'configuracoes'>('home');
+  const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
+  const [currentInspecao, setCurrentInspecao] = useState<Inspecao | null>(null);
+  const [currentArea, setCurrentArea] = useState<Area | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<MediaFile | null>(null);
+  const [cameraOpen, setCameraOpen] = useState<{ itemId: number } | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Estados para nova inspeção
+  const [novaInspecao, setNovaInspecao] = useState({
+    nome: '',
+    numeroContrato: '',
+    engenheiroResponsavel: '',
+    data: new Date().toISOString().split('T')[0]
+  });
+
+  // Estados para nova área
+  const [novaArea, setNovaArea] = useState('');
+  const [showNovaAreaForm, setShowNovaAreaForm] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [selectAllItems, setSelectAllItems] = useState(true);
+
+  // Estados para configurações
+  const [configuracoes, setConfiguracoes] = useState<ConfiguracaoSistema>({
+    empresa: {
+      nome: 'Empresa de Inspeções Elétricas Ltda.',
+      cnpj: '12.345.678/0001-90',
+      endereco: 'Rua das Instalações, 123 - Centro',
+      telefone: '(11) 99999-9999',
+      email: 'contato@inspecaoeletrica.com.br',
+      logo: ''
+    },
+    relatorios: {
+      incluirFotos: true,
+      incluirComentarios: true,
+      formatoPadrao: 'PDF',
+      assinaturasDigitais: false,
+      marcaDagua: true
+    },
+    notificacoes: {
+      emailInspecaoConcluida: true,
+      emailPrazosVencimento: true,
+      lembreteManutencao: false,
+      alertasNaoConformidade: true
+    },
+    sistema: {
+      tema: 'claro',
+      idioma: 'pt-BR',
+      autoSalvar: true,
+      backupAutomatico: true,
+      qualidadeFoto: 'alta'
+    },
+    seguranca: {
+      senhaObrigatoria: false,
+      tempoSessao: 60,
+      logAuditoria: true,
+      criptografiaLocal: false
+    }
+  });
+
+  const [activeConfigTab, setActiveConfigTab] = useState<'empresa' | 'relatorios' | 'notificacoes' | 'sistema' | 'seguranca'>('empresa');
+
+  const createNewInspecao = () => {
+    if (!novaInspecao.nome || !novaInspecao.numeroContrato || !novaInspecao.engenheiroResponsavel) {
+      alert('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    const inspecao: Inspecao = {
+      id: Date.now().toString(),
+      nome: novaInspecao.nome,
+      numeroContrato: novaInspecao.numeroContrato,
+      engenheiroResponsavel: novaInspecao.engenheiroResponsavel,
+      data: novaInspecao.data,
+      areas: [],
+      status: 'Em Andamento',
+      createdAt: new Date().toISOString()
+    };
+
+    setInspecoes(prev => [...prev, inspecao]);
+    setCurrentInspecao(inspecao);
+    setCurrentView('inspecao');
+    
+    // Reset form
+    setNovaInspecao({
+      nome: '',
+      numeroContrato: '',
+      engenheiroResponsavel: '',
+      data: new Date().toISOString().split('T')[0]
+    });
+  };
+
+  const showItemSelection = () => {
+    setSelectedItems(checklistItems.map(item => item.id)); // Selecionar todos por padrão
+    setSelectAllItems(true);
+    setCurrentView('selecionar-itens');
+  };
+
+  const toggleSelectAll = () => {
+    if (selectAllItems) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(checklistItems.map(item => item.id));
+    }
+    setSelectAllItems(!selectAllItems);
+  };
+
+  const toggleItemSelection = (itemId: number) => {
+    setSelectedItems(prev => {
+      const newSelection = prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId];
+      
+      setSelectAllItems(newSelection.length === checklistItems.length);
+      return newSelection;
+    });
+  };
+
+  const addAreaWithSelectedItems = () => {
+    if (!novaArea.trim() || !currentInspecao) return;
+
+    if (selectedItems.length === 0) {
+      alert('Selecione pelo menos um item para inspeção');
+      return;
+    }
+
+    // Criar checklist apenas com os itens selecionados
+    const checklistSelecionado: ChecklistItem[] = checklistItems
+      .filter(item => selectedItems.includes(item.id))
+      .map(item => ({
+        id: item.id,
+        norma: item.norma,
+        descricao: item.descricao,
+        condicao: '',
+        po: '',
+        fe: '',
+        gsd: '',
+        nper: '',
+        comentario: '',
+        medias: [],
+        selected: true
+      }));
+
+    const area: Area = {
+      id: Date.now().toString(),
+      nome: novaArea,
+      items: checklistSelecionado
+    };
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: [...currentInspecao.areas, area]
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+    setNovaArea('');
+    setShowNovaAreaForm(false);
+    setCurrentView('inspecao');
+    
+    // Mostrar mensagem de confirmação
+    alert(`Área "${novaArea}" criada com sucesso!\nChecklist com ${selectedItems.length} itens NR-10 selecionados.`);
+  };
+
+  const addArea = () => {
+    if (!novaArea.trim() || !currentInspecao) return;
+
+    // Criar checklist completo com todos os 75 itens
+    const checklistCompleto: ChecklistItem[] = checklistItems.map(item => ({
+      id: item.id,
+      norma: item.norma,
+      descricao: item.descricao,
+      condicao: '',
+      po: '',
+      fe: '',
+      gsd: '',
+      nper: '',
+      comentario: '',
+      medias: [],
+      selected: true
+    }));
+
+    const area: Area = {
+      id: Date.now().toString(),
+      nome: novaArea,
+      items: checklistCompleto
+    };
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: [...currentInspecao.areas, area]
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+    setNovaArea('');
+    setShowNovaAreaForm(false);
+    
+    // Mostrar mensagem de confirmação
+    alert(`Área "${novaArea}" criada com sucesso!\nChecklist completo com 75 itens NR-10 adicionado.`);
+  };
+
+  const updateItem = (areaId: string, itemId: number, field: keyof ChecklistItem, value: any) => {
+    if (!currentInspecao) return;
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: currentInspecao.areas.map(area => 
+        area.id === areaId 
+          ? {
+              ...area,
+              items: area.items.map(item => 
+                item.id === itemId ? { ...item, [field]: value } : item
+              )
+            }
+          : area
+      )
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+  };
+
+  const handleFileUpload = (areaId: string, itemId: number, files: FileList | null, type: 'image' | 'video' | 'audio') => {
+    if (!files || !currentInspecao) return;
+
+    Array.from(files).forEach(file => {
+      const mediaFile: MediaFile = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        file,
+        type,
+        url: URL.createObjectURL(file),
+        name: file.name,
+        size: file.size
+      };
+
+      updateItem(areaId, itemId, 'medias', 
+        currentInspecao.areas.find(a => a.id === areaId)?.items.find(i => i.id === itemId)?.medias.concat(mediaFile) || [mediaFile]
+      );
+    });
+  };
+
+  const removeMedia = (areaId: string, itemId: number, mediaId: string) => {
+    if (!currentInspecao) return;
+    
+    const area = currentInspecao.areas.find(a => a.id === areaId);
+    const item = area?.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    updateItem(areaId, itemId, 'medias', item.medias.filter(m => m.id !== mediaId));
+  };
+
+  const openCamera = async (itemId: number) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      streamRef.current = stream;
+      setCameraOpen({ itemId });
+      
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Erro ao acessar câmera:', error);
+      alert('Não foi possível acessar a câmera');
+    }
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current || !cameraOpen || !currentArea) return;
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const context = canvas.getContext('2d');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context?.drawImage(video, 0, 0);
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        const mediaFile: MediaFile = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          file,
+          type: 'image',
+          url: URL.createObjectURL(file),
+          name: file.name,
+          size: file.size
+        };
+
+        updateItem(currentArea.id, cameraOpen.itemId, 'medias', 
+          currentArea.items.find(i => i.id === cameraOpen.itemId)?.medias.concat(mediaFile) || [mediaFile]
+        );
+      }
+    }, 'image/jpeg', 0.8);
+
+    closeCamera();
+  };
+
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setCameraOpen(null);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'C': return 'bg-green-100 text-green-800';
+      case 'NC': return 'bg-red-100 text-red-800';
+      case 'NA': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const generatePDF = () => {
+    if (!currentInspecao) return;
+    
+    // Simular geração de PDF
+    const dataStr = JSON.stringify(currentInspecao, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `relatorio-${currentInspecao.nome.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const getInspecaoStats = (inspecao: Inspecao) => {
+    let totalItems = 0;
+    let conformes = 0;
+    let naoConformes = 0;
+    let naoAplicaveis = 0;
+
+    inspecao.areas.forEach(area => {
+      area.items.forEach(item => {
+        totalItems++;
+        if (item.condicao === 'C') conformes++;
+        else if (item.condicao === 'NC') naoConformes++;
+        else if (item.condicao === 'NA') naoAplicaveis++;
+      });
+    });
+
+    return { totalItems, conformes, naoConformes, naoAplicaveis };
+  };
+
+  const canCompleteInspection = (area: Area) => {
+    const totalItems = area.items.length;
+    const completedItems = area.items.filter(item => 
+      item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
+    ).length;
+    
+    return completedItems > 0; // Permite concluir se pelo menos um item foi preenchido
+  };
+
+  const completeInspection = (area: Area) => {
+    if (!currentInspecao) return;
+
+    const totalItems = area.items.length;
+    const completedItems = area.items.filter(item => 
+      item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
+    ).length;
+
+    const incompleteItems = totalItems - completedItems;
+
+    if (incompleteItems > 0) {
+      const confirmMessage = `Atenção: ${incompleteItems} item(ns) não foram preenchidos.\n\nDeseja realmente concluir a inspeção desta área mesmo assim?`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+    }
+
+    // Marcar inspeção como concluída
+    const updatedInspecao = {
+      ...currentInspecao,
+      status: 'Concluída' as const
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+    
+    alert(`Inspeção da área "${area.nome}" concluída com sucesso!\n${completedItems} de ${totalItems} itens foram preenchidos.`);
+    setCurrentView('inspecao');
+  };
+
+  const salvarConfiguracoes = () => {
+    // Simular salvamento das configurações
+    localStorage.setItem('configuracoes-sistema', JSON.stringify(configuracoes));
+    alert('Configurações salvas com sucesso!');
+  };
+
+  const resetarConfiguracoes = () => {
+    if (confirm('Tem certeza que deseja restaurar as configurações padrão? Esta ação não pode ser desfeita.')) {
+      setConfiguracoes({
+        empresa: {
+          nome: 'Empresa de Inspeções Elétricas Ltda.',
+          cnpj: '12.345.678/0001-90',
+          endereco: 'Rua das Instalações, 123 - Centro',
+          telefone: '(11) 99999-9999',
+          email: 'contato@inspecaoeletrica.com.br',
+          logo: ''
+        },
+        relatorios: {
+          incluirFotos: true,
+          incluirComentarios: true,
+          formatoPadrao: 'PDF',
+          assinaturasDigitais: false,
+          marcaDagua: true
+        },
+        notificacoes: {
+          emailInspecaoConcluida: true,
+          emailPrazosVencimento: true,
+          lembreteManutencao: false,
+          alertasNaoConformidade: true
+        },
+        sistema: {
+          tema: 'claro',
+          idioma: 'pt-BR',
+          autoSalvar: true,
+          backupAutomatico: true,
+          qualidadeFoto: 'alta'
+        },
+        seguranca: {
+          senhaObrigatoria: false,
+          tempoSessao: 60,
+          logAuditoria: true,
+          criptografiaLocal: false
+        }
+      });
+      alert('Configurações restauradas para os valores padrão!');
+    }
+  };
+
+  // Renderização da tela de configurações
+  if (currentView === 'configuracoes') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setCurrentView('home')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  <Home className="w-6 h-6" />
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Configurações do Sistema</h1>
+                  <p className="text-gray-600">Personalize o sistema de inspeção elétrica conforme suas necessidades</p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={resetarConfiguracoes}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Restaurar Padrão
+                </button>
+                <button
+                  onClick={salvarConfiguracoes}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Save className="w-4 h-4" />
+                  Salvar Configurações
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Menu lateral */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-lg shadow-lg p-4">
+                <nav className="space-y-2">
+                  <button
+                    onClick={() => setActiveConfigTab('empresa')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      activeConfigTab === 'empresa' 
+                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Building className="w-5 h-5" />
+                    Dados da Empresa
+                  </button>
+                  
+                  <button
+                    onClick={() => setActiveConfigTab('relatorios')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      activeConfigTab === 'relatorios' 
+                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileText className="w-5 h-5" />
+                    Relatórios
+                  </button>
+                  
+                  <button
+                    onClick={() => setActiveConfigTab('notificacoes')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      activeConfigTab === 'notificacoes' 
+                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Bell className="w-5 h-5" />
+                    Notificações
+                  </button>
+                  
+                  <button
+                    onClick={() => setActiveConfigTab('sistema')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      activeConfigTab === 'sistema' 
+                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Monitor className="w-5 h-5" />
+                    Sistema
+                  </button>
+                  
+                  <button
+                    onClick={() => setActiveConfigTab('seguranca')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      activeConfigTab === 'seguranca' 
+                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Shield className="w-5 h-5" />
+                    Segurança
+                  </button>
+                </nav>
+              </div>
+            </div>
+
+            {/* Conteúdo das configurações */}
+            <div className="lg:col-span-3">
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                
+                {/* Dados da Empresa */}
+                {activeConfigTab === 'empresa' && (
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-6">Dados da Empresa</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Nome da Empresa</label>
+                        <input
+                          type="text"
+                          value={configuracoes.empresa.nome}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            empresa: { ...prev.empresa, nome: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">CNPJ</label>
+                        <input
+                          type="text"
+                          value={configuracoes.empresa.cnpj}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            empresa: { ...prev.empresa, cnpj: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Endereço</label>
+                        <input
+                          type="text"
+                          value={configuracoes.empresa.endereco}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            empresa: { ...prev.empresa, endereco: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
+                        <input
+                          type="text"
+                          value={configuracoes.empresa.telefone}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            empresa: { ...prev.empresa, telefone: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
+                        <input
+                          type="email"
+                          value={configuracoes.empresa.email}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            empresa: { ...prev.empresa, email: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Relatórios */}
+                {activeConfigTab === 'relatorios' && (
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-6">Configurações de Relatórios</h2>
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Formato Padrão</label>
+                          <select
+                            value={configuracoes.relatorios.formatoPadrao}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              relatorios: { ...prev.relatorios, formatoPadrao: e.target.value as 'PDF' | 'Excel' | 'Word' }
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="PDF">PDF</option>
+                            <option value="Excel">Excel</option>
+                            <option value="Word">Word</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Incluir Fotos nos Relatórios</h3>
+                            <p className="text-sm text-gray-500">Anexar todas as fotos capturadas durante a inspeção</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.relatorios.incluirFotos}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                relatorios: { ...prev.relatorios, incluirFotos: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Incluir Comentários</h3>
+                            <p className="text-sm text-gray-500">Adicionar observações e comentários no relatório</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.relatorios.incluirComentarios}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                relatorios: { ...prev.relatorios, incluirComentarios: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Marca d'água</h3>
+                            <p className="text-sm text-gray-500">Adicionar marca d'água da empresa nos relatórios</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.relatorios.marcaDagua}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                relatorios: { ...prev.relatorios, marcaDagua: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Assinaturas Digitais</h3>
+                            <p className="text-sm text-gray-500">Habilitar assinatura digital nos relatórios</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.relatorios.assinaturasDigitais}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                relatorios: { ...prev.relatorios, assinaturasDigitais: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notificações */}
+                {activeConfigTab === 'notificacoes' && (
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-6">Configurações de Notificações</h2>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-900">E-mail ao Concluir Inspeção</h3>
+                          <p className="text-sm text-gray-500">Enviar e-mail automático quando uma inspeção for concluída</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={configuracoes.notificacoes.emailInspecaoConcluida}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              notificacoes: { ...prev.notificacoes, emailInspecaoConcluida: e.target.checked }
+                            }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-900">Alertas de Prazos</h3>
+                          <p className="text-sm text-gray-500">Notificar sobre prazos de adequação próximos do vencimento</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={configuracoes.notificacoes.emailPrazosVencimento}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              notificacoes: { ...prev.notificacoes, emailPrazosVencimento: e.target.checked }
+                            }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-900">Lembretes de Manutenção</h3>
+                          <p className="text-sm text-gray-500">Notificar sobre manutenções preventivas programadas</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={configuracoes.notificacoes.lembreteManutencao}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              notificacoes: { ...prev.notificacoes, lembreteManutencao: e.target.checked }
+                            }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-900">Alertas de Não Conformidade</h3>
+                          <p className="text-sm text-gray-500">Notificar imediatamente sobre itens não conformes críticos</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={configuracoes.notificacoes.alertasNaoConformidade}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              notificacoes: { ...prev.notificacoes, alertasNaoConformidade: e.target.checked }
+                            }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sistema */}
+                {activeConfigTab === 'sistema' && (
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-6">Configurações do Sistema</h2>
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Tema</label>
+                          <select
+                            value={configuracoes.sistema.tema}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              sistema: { ...prev.sistema, tema: e.target.value as 'claro' | 'escuro' | 'auto' }
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="claro">Claro</option>
+                            <option value="escuro">Escuro</option>
+                            <option value="auto">Automático</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Idioma</label>
+                          <select
+                            value={configuracoes.sistema.idioma}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              sistema: { ...prev.sistema, idioma: e.target.value as 'pt-BR' | 'en-US' | 'es-ES' }
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="pt-BR">Português (Brasil)</option>
+                            <option value="en-US">English (US)</option>
+                            <option value="es-ES">Español</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Qualidade das Fotos</label>
+                          <select
+                            value={configuracoes.sistema.qualidadeFoto}
+                            onChange={(e) => setConfiguracoes(prev => ({
+                              ...prev,
+                              sistema: { ...prev.sistema, qualidadeFoto: e.target.value as 'alta' | 'media' | 'baixa' }
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="alta">Alta (Melhor qualidade)</option>
+                            <option value="media">Média (Balanceado)</option>
+                            <option value="baixa">Baixa (Menor tamanho)</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Auto-salvar</h3>
+                            <p className="text-sm text-gray-500">Salvar automaticamente as alterações durante a inspeção</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.sistema.autoSalvar}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                sistema: { ...prev.sistema, autoSalvar: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Backup Automático</h3>
+                            <p className="text-sm text-gray-500">Criar backup automático dos dados diariamente</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.sistema.backupAutomatico}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                sistema: { ...prev.sistema, backupAutomatico: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Segurança */}
+                {activeConfigTab === 'seguranca' && (
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-6">Configurações de Segurança</h2>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Tempo de Sessão (minutos)</label>
+                        <input
+                          type="number"
+                          min="15"
+                          max="480"
+                          value={configuracoes.seguranca.tempoSessao}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            seguranca: { ...prev.seguranca, tempoSessao: parseInt(e.target.value) }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Tempo limite para inatividade (15-480 minutos)</p>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Senha Obrigatória</h3>
+                            <p className="text-sm text-gray-500">Exigir senha para acessar o sistema</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.seguranca.senhaObrigatoria}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                seguranca: { ...prev.seguranca, senhaObrigatoria: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Log de Auditoria</h3>
+                            <p className="text-sm text-gray-500">Registrar todas as ações realizadas no sistema</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.seguranca.logAuditoria}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                seguranca: { ...prev.seguranca, logAuditoria: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900">Criptografia Local</h3>
+                            <p className="text-sm text-gray-500">Criptografar dados armazenados localmente</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={configuracoes.seguranca.criptografiaLocal}
+                              onChange={(e) => setConfiguracoes(prev => ({
+                                ...prev,
+                                seguranca: { ...prev.seguranca, criptografiaLocal: e.target.checked }
+                              }))}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderização da tela de seleção de itens
+  if (currentView === 'selecionar-itens') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="flex items-center gap-4 mb-4">
+              <button
+                onClick={() => setCurrentView('inspecao')}
+                className="text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <List className="w-6 h-6" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Selecionar Itens para Inspeção - {novaArea}
+                </h1>
+                <p className="text-gray-600">
+                  Escolha quais itens do checklist NR-10 serão inspecionados nesta área
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={toggleSelectAll}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                    selectAllItems 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {selectAllItems ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                </button>
+                <span className="text-sm text-gray-600">
+                  {selectedItems.length} de {checklistItems.length} itens selecionados
+                </span>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCurrentView('inspecao')}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={addAreaWithSelectedItems}
+                  disabled={selectedItems.length === 0}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  Criar Área com Itens Selecionados
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div className="max-h-[70vh] overflow-y-auto">
+              <table className="w-full">
+                <thead className="bg-gray-800 text-white sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                      <input
+                        type="checkbox"
+                        checked={selectAllItems}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Norma</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Descrição</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {checklistItems.map((item, index) => (
+                    <tr 
+                      key={item.id} 
+                      className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
+                        selectedItems.includes(item.id) ? 'bg-blue-50' : ''
+                      } hover:bg-blue-100 transition-colors cursor-pointer`}
+                      onClick={() => toggleItemSelection(item.id)}
+                    >
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.includes(item.id)}
+                          onChange={() => toggleItemSelection(item.id)}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {item.id}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-900 font-medium">
+                        {item.norma}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-700">
+                        {item.descricao}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderização da tela inicial
+  if (currentView === 'home') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div className="text-center">
+              <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                Sistema de Inspeção Elétrica NR-10
+              </h1>
+              <p className="text-xl text-gray-600 mb-8">
+                Gestão completa de inspeções elétricas com checklist de 75 itens conforme NR-10
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <button
+                  onClick={() => setCurrentView('nova-inspecao')}
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                >
+                  <Plus className="w-8 h-8 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">Nova Inspeção</h3>
+                  <p className="text-sm opacity-90">Criar nova inspeção elétrica</p>
+                </button>
+
+                <button className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                  <BarChart3 className="w-8 h-8 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">Dashboard</h3>
+                  <p className="text-sm opacity-90">Análises e relatórios</p>
+                </button>
+
+                <button className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                  <Clock className="w-8 h-8 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">Cronograma</h3>
+                  <p className="text-sm opacity-90">Adequações e prazos</p>
+                </button>
+
+                <button 
+                  onClick={() => setCurrentView('configuracoes')}
+                  className="bg-gradient-to-r from-orange-600 to-orange-700 text-white p-6 rounded-xl hover:from-orange-700 hover:to-orange-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                >
+                  <Settings className="w-8 h-8 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">Configurações</h3>
+                  <p className="text-sm opacity-90">Ajustes do sistema</p>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Lista de Inspeções */}
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Inspeções Recentes</h2>
+            
+            {inspecoes.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">Nenhuma inspeção criada ainda</p>
+                <p className="text-gray-400">Clique em "Nova Inspeção" para começar</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {inspecoes.map(inspecao => {
+                  const stats = getInspecaoStats(inspecao);
+                  const progresso = stats.totalItems > 0 ? 
+                    Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.totalItems) * 100) : 0;
+
+                  return (
+                    <div key={inspecao.id} className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">{inspecao.nome}</h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          inspecao.status === 'Concluída' ? 'bg-green-100 text-green-800' :
+                          inspecao.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {inspecao.status}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm text-gray-600 mb-4">
+                        <div className="flex items-center gap-2">
+                          <Building className="w-4 h-4" />
+                          <span>Contrato: {inspecao.numeroContrato}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4" />
+                          <span>{inspecao.engenheiroResponsavel}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          <span>{new Date(inspecao.data).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4" />
+                          <span>{inspecao.areas.length} área(s)</span>
+                        </div>
+                      </div>
+
+                      <div className="mb-4">
+                        <div className="flex justify-between text-sm text-gray-600 mb-1">
+                          <span>Progresso</span>
+                          <span>{progresso}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${progresso}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setCurrentInspecao(inspecao);
+                            setCurrentView('inspecao');
+                          }}
+                          className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                        >
+                          Abrir
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCurrentInspecao(inspecao);
+                            generatePDF();
+                          }}
+                          className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                        >
+                          <FileDown className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderização da tela de nova inspeção
+  if (currentView === 'nova-inspecao') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="flex items-center gap-4 mb-8">
+              <button
+                onClick={() => setCurrentView('home')}
+                className="text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <Home className="w-6 h-6" />
+              </button>
+              <h1 className="text-3xl font-bold text-gray-900">Nova Inspeção Elétrica</h1>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome da Inspeção *
+                </label>
+                <input
+                  type="text"
+                  value={novaInspecao.nome}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, nome: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: Inspeção Elétrica - Prédio A"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Número do Contrato *
+                </label>
+                <input
+                  type="text"
+                  value={novaInspecao.numeroContrato}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, numeroContrato: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: CT-2024-001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Engenheiro Responsável *
+                </label>
+                <input
+                  type="text"
+                  value={novaInspecao.engenheiroResponsavel}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, engenheiroResponsavel: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: João Silva - CREA 123456"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Data da Inspeção *
+                </label>
+                <input
+                  type="date"
+                  value={novaInspecao.data}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, data: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-4">
+              <button
+                onClick={() => setCurrentView('home')}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={createNewInspecao}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Criar Inspeção
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderização da tela de inspeção
+  if (currentView === 'inspecao' && currentInspecao) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Header da Inspeção */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setCurrentView('home')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  <Home className="w-6 h-6" />
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">{currentInspecao.nome}</h1>
+                  <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-2">
+                    <span>Contrato: {currentInspecao.numeroContrato}</span>
+                    <span>Responsável: {currentInspecao.engenheiroResponsavel}</span>
+                    <span>Data: {new Date(currentInspecao.data).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={generatePDF}
+                  className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <FileDown className="w-4 h-4" />
+                  Gerar PDF
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Áreas */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Áreas de Inspeção</h2>
+              <button
+                onClick={() => setShowNovaAreaForm(true)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Nova Área
+              </button>
+            </div>
+
+            {showNovaAreaForm && (
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={novaArea}
+                    onChange={(e) => setNovaArea(e.target.value)}
+                    placeholder="Nome da área (ex: Subestação Principal)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={addArea}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    Todos os Itens (75)
+                  </button>
+                  <button
+                    onClick={showItemSelection}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Selecionar Itens
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowNovaAreaForm(false);
+                      setNovaArea('');
+                    }}
+                    className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {currentInspecao.areas.map(area => {
+                const stats = {
+                  total: area.items.length,
+                  conformes: area.items.filter(i => i.condicao === 'C').length,
+                  naoConformes: area.items.filter(i => i.condicao === 'NC').length,
+                  naoAplicaveis: area.items.filter(i => i.condicao === 'NA').length
+                };
+                const progresso = stats.total > 0 ? 
+                  Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.total) * 100) : 0;
+
+                return (
+                  <div key={area.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <h3 className="font-semibold text-gray-900 mb-2">{area.nome}</h3>
+                    <div className="text-sm text-gray-600 mb-3">
+                      <div>Total: {stats.total} itens</div>
+                      <div className="flex gap-4 mt-1">
+                        <span className="text-green-600">C: {stats.conformes}</span>
+                        <span className="text-red-600">NC: {stats.naoConformes}</span>
+                        <span className="text-yellow-600">NA: {stats.naoAplicaveis}</span>
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <div className="flex justify-between text-xs text-gray-600 mb-1">
+                        <span>Progresso</span>
+                        <span>{progresso}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${progresso}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCurrentArea(area);
+                        setCurrentView('checklist');
+                      }}
+                      className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      Inspecionar
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {currentInspecao.areas.length === 0 && (
+              <div className="text-center py-8">
+                <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-500">Nenhuma área adicionada ainda</p>
+                <p className="text-gray-400 text-sm">Clique em "Nova Área" para começar</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderização da tela de checklist da área
+  if (currentView === 'checklist' && currentArea && currentInspecao) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setCurrentView('inspecao')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  <List className="w-6 h-6" />
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {currentArea.nome} - {currentInspecao.nome}
+                  </h1>
+                  <p className="text-gray-600">
+                    Checklist NR-10 com {currentArea.items.length} itens de inspeção elétrica
+                  </p>
+                </div>
+              </div>
+              
+              {/* Botão de Concluir Inspeção */}
+              <button
+                onClick={() => completeInspection(currentArea)}
+                disabled={!canCompleteInspection(currentArea)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  canCompleteInspection(currentArea)
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                }`}
+              >
+                <CheckCircle className="w-4 h-4" />
+                Concluir Inspeção
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            {/* Container com barra de rolagem no topo */}
+            <div className="overflow-x-auto">
+              {/* Div invisível para forçar barra de rolagem no topo */}
+              <div className="h-4 overflow-x-auto mb-2">
+                <div style={{ width: '1200px', height: '1px' }}></div>
+              </div>
+              
+              {/* Tabela principal */}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1200px]">
+                  <thead className="bg-gray-800 text-white sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Norma</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Descrição</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Condição</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">PO</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">FE</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">GSD</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Comentário</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {currentArea.items.map((item, index) => (
+                      <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {item.id}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-900 font-medium">
+                          {item.norma}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
+                          {item.descricao}
+                        </td>
+                        
+                        {/* Condição */}
+                        <td className="px-4 py-4 text-center">
+                          <select
+                            value={item.condicao}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value)}
+                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                          >
+                            <option value="">-</option>
+                            <option value="C">C</option>
+                            <option value="NC">NC</option>
+                            <option value="NA">NA</option>
+                          </select>
+                        </td>
+
+                        {/* PO */}
+                        <td className="px-4 py-4 text-center">
+                          <select
+                            value={item.po}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value)}
+                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.po)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                          >
+                            <option value="">-</option>
+                            <option value="C">C</option>
+                            <option value="NC">NC</option>
+                            <option value="NA">NA</option>
+                          </select>
+                        </td>
+
+                        {/* FE */}
+                        <td className="px-4 py-4 text-center">
+                          <select
+                            value={item.fe}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value)}
+                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.fe)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                          >
+                            <option value="">-</option>
+                            <option value="C">C</option>
+                            <option value="NC">NC</option>
+                            <option value="NA">NA</option>
+                          </select>
+                        </td>
+
+                        {/* GSD */}
+                        <td className="px-4 py-4 text-center">
+                          <select
+                            value={item.gsd}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value)}
+                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.gsd)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                          >
+                            <option value="">-</option>
+                            <option value="C">C</option>
+                            <option value="NC">NC</option>
+                            <option value="NA">NA</option>
+                          </select>
+                        </td>
+
+                        {/* NPER */}
+                        <td className="px-4 py-4 text-center">
+                          <select
+                            value={item.nper}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value)}
+                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.nper)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                          >
+                            <option value="">-</option>
+                            <option value="C">C</option>
+                            <option value="NC">NC</option>
+                            <option value="NA">NA</option>
+                          </select>
+                        </td>
+
+                        {/* Comentário */}
+                        <td className="px-4 py-4">
+                          <textarea
+                            value={item.comentario}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'comentario', e.target.value)}
+                            placeholder="Adicione observações..."
+                            className="w-full min-w-[200px] px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                            rows={2}
+                          />
+                        </td>
+
+                        {/* Mídia */}
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col gap-2 min-w-[120px]">
+                            {/* Botões de mídia em linha horizontal */}
+                            <div className="flex gap-1">
+                              {/* Upload Imagem */}
+                              <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
+                                <Upload className="w-3 h-3" />
+                                Img
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'image')}
+                                  className="hidden"
+                                />
+                              </label>
+
+                              {/* Upload Vídeo */}
+                              <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
+                                <Video className="w-3 h-3" />
+                                Vid
+                                <input
+                                  type="file"
+                                  accept="video/*"
+                                  multiple
+                                  onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'video')}
+                                  className="hidden"
+                                />
+                              </label>
+
+                              {/* Upload Áudio */}
+                              <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
+                                <Mic className="w-3 h-3" />
+                                Aud
+                                <input
+                                  type="file"
+                                  accept="audio/*"
+                                  multiple
+                                  onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'audio')}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+
+                            {/* Lista de mídias */}
+                            {item.medias.length > 0 && (
+                              <div className="grid grid-cols-2 gap-1 mt-2">
+                                {item.medias.map((media) => (
+                                  <div key={media.id} className="relative group">
+                                    {media.type === 'image' && (
+                                      <img
+                                        src={media.url}
+                                        alt={media.name}
+                                        className="w-full h-16 object-cover rounded border cursor-pointer"
+                                        onClick={() => setSelectedMedia(media)}
+                                      />
+                                    )}
+                                    {media.type === 'video' && (
+                                      <div
+                                        className="w-full h-16 bg-purple-100 rounded border flex items-center justify-center cursor-pointer"
+                                        onClick={() => setSelectedMedia(media)}
+                                      >
+                                        <Video className="w-6 h-6 text-purple-600" />
+                                      </div>
+                                    )}
+                                    {media.type === 'audio' && (
+                                      <div
+                                        className="w-full h-16 bg-orange-100 rounded border flex items-center justify-center cursor-pointer"
+                                        onClick={() => setSelectedMedia(media)}
+                                      >
+                                        <Mic className="w-6 h-6 text-orange-600" />
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => removeMedia(currentArea.id, item.id, media.id)}
+                                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal da Câmera */}
+        {cameraOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-lg font-semibold mb-4">Tirar Foto</h3>
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full rounded-lg"
+                />
+                <canvas ref={canvasRef} className="hidden" />
+              </div>
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={capturePhoto}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Capturar
+                </button>
+                <button
+                  onClick={closeCamera}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Visualização de Mídia */}
+        {selectedMedia && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">{selectedMedia.name}</h3>
+                <button
+                  onClick={() => setSelectedMedia(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              
+              {selectedMedia.type === 'image' && (
+                <img
+                  src={selectedMedia.url}
+                  alt={selectedMedia.name}
+                  className="max-w-full max-h-[70vh] object-contain mx-auto"
+                />
+              )}
+              
+              {selectedMedia.type === 'video' && (
+                <video
+                  src={selectedMedia.url}
+                  controls
+                  className="max-w-full max-h-[70vh] mx-auto"
+                />
+              )}
+              
+              {selectedMedia.type === 'audio' && (
+                <div className="text-center py-8">
+                  <Mic className="w-16 h-16 text-orange-600 mx-auto mb-4" />
+                  <audio src={selectedMedia.url} controls className="mx-auto" />
+                </div>
+              )}
+              
+              <div className="mt-4 text-sm text-gray-600">
+                <p>Tamanho: {(selectedMedia.size / 1024 / 1024).toFixed(2)} MB</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
