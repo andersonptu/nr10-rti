@@ -1476,6 +1476,7 @@ export default function InspecaoEletrica() {
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, nome: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Empresa ABC Ltda"
+                  maxLength={undefined}
                 />
               </div>
 
@@ -1489,6 +1490,7 @@ export default function InspecaoEletrica() {
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, numeroContrato: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: CT-2024-001"
+                  maxLength={undefined}
                 />
               </div>
 
