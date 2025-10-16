@@ -294,11 +294,14 @@ export default function InspecaoEletrica() {
 
   const toggleSelectAll = () => {
     if (selectAllItems) {
+      // Se todos estão selecionados, desmarcar todos
       setSelectedItems([]);
+      setSelectAllItems(false);
     } else {
+      // Se nem todos estão selecionados, selecionar todos
       setSelectedItems(checklistItems.map(item => item.id));
+      setSelectAllItems(true);
     }
-    setSelectAllItems(!selectAllItems);
   };
 
   const toggleItemSelection = (itemId: number) => {
@@ -307,6 +310,7 @@ export default function InspecaoEletrica() {
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId];
       
+      // Atualizar o estado do "Selecionar Todos" baseado na nova seleção
       setSelectAllItems(newSelection.length === checklistItems.length);
       return newSelection;
     });
@@ -514,19 +518,155 @@ export default function InspecaoEletrica() {
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     if (!currentInspecao) return;
     
-    // Simular geração de PDF
-    const dataStr = JSON.stringify(currentInspecao, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `relatorio-${currentInspecao.nome.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+    try {
+      // Importar jsPDF dinamicamente
+      const { jsPDF } = await import('jspdf');
+      
+      // Criar nova instância do PDF
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // Configurações
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 20;
+      let yPosition = margin;
+      
+      // Função para adicionar nova página se necessário
+      const checkPageBreak = (requiredHeight: number) => {
+        if (yPosition + requiredHeight > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+      };
+      
+      // Cabeçalho
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('RELATÓRIO DE INSPEÇÃO ELÉTRICA NR-10', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 10;
+      
+      pdf.setFontSize(14);
+      pdf.text(currentInspecao.nome, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 8;
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Número Sequencial: ${currentInspecao.numeroSequencial}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+      
+      // Dados da Inspeção
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('DADOS DA INSPEÇÃO', margin, yPosition);
+      yPosition += 8;
+      
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      const infoData = [
+        `Contrato: ${currentInspecao.numeroContrato}`,
+        `Engenheiro Responsável: ${currentInspecao.engenheiroResponsavel}`,
+        `Responsável do Cliente: ${currentInspecao.responsavelCliente}`,
+        `Data: ${new Date(currentInspecao.data).toLocaleDateString('pt-BR')}`,
+        `Status: ${currentInspecao.status}`
+      ];
+      
+      infoData.forEach(info => {
+        pdf.text(info, margin, yPosition);
+        yPosition += 5;
+      });
+      yPosition += 10;
+      
+      // Áreas e Itens
+      currentInspecao.areas.forEach((area, areaIndex) => {
+        checkPageBreak(20);
+        
+        // Título da área
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`ÁREA: ${area.nome}`, margin, yPosition);
+        yPosition += 8;
+        
+        // Cabeçalho da tabela
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER'];
+        const colWidths = [15, 25, 80, 15, 15, 15, 15, 15];
+        let xPos = margin;
+        
+        checkPageBreak(10);
+        
+        // Desenhar cabeçalho
+        headers.forEach((header, i) => {
+          pdf.rect(xPos, yPosition - 3, colWidths[i], 6);
+          pdf.text(header, xPos + 2, yPosition + 1);
+          xPos += colWidths[i];
+        });
+        yPosition += 6;
+        
+        // Dados da tabela
+        pdf.setFont('helvetica', 'normal');
+        area.items.forEach((item) => {
+          checkPageBreak(8);
+          
+          xPos = margin;
+          const rowData = [
+            item.id.toString(),
+            item.norma,
+            item.descricao.length > 40 ? item.descricao.substring(0, 37) + '...' : item.descricao,
+            item.condicao || '-',
+            item.po || '-',
+            item.fe || '-',
+            item.gsd || '-',
+            item.nper || '-'
+          ];
+          
+          // Desenhar células
+          rowData.forEach((data, i) => {
+            pdf.rect(xPos, yPosition - 3, colWidths[i], 6);
+            pdf.text(data, xPos + 2, yPosition + 1);
+            xPos += colWidths[i];
+          });
+          yPosition += 6;
+          
+          // Adicionar comentário se existir
+          if (item.comentario && item.comentario.trim()) {
+            checkPageBreak(5);
+            pdf.setFontSize(7);
+            pdf.setFont('helvetica', 'italic');
+            pdf.text(`Obs: ${item.comentario}`, margin + 2, yPosition + 1);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            yPosition += 4;
+          }
+        });
+        
+        yPosition += 10;
+      });
+      
+      // Rodapé
+      checkPageBreak(15);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'italic');
+      pdf.text(`Relatório gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, margin, yPosition);
+      yPosition += 4;
+      pdf.text('Sistema: PA BRASIL AUTOMAÇÃO - Inspeção Elétrica NR-10', margin, yPosition);
+      
+      // Nome do arquivo com extensão .pdf
+      const fileName = `relatorio-${currentInspecao.nome.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Salvar o PDF
+      pdf.save(fileName);
+      
+      // Mostrar mensagem de sucesso
+      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}`);
+      
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar PDF. Verifique se a biblioteca jsPDF está instalada.');
+    }
   };
 
   const getInspecaoStats = (inspecao: Inspecao) => {
@@ -1118,7 +1258,7 @@ export default function InspecaoEletrica() {
                             ...prev,
                             empresa: { ...prev.empresa, nome: e.target.value }
                           }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       
@@ -1131,7 +1271,7 @@ export default function InspecaoEletrica() {
                             ...prev,
                             empresa: { ...prev.empresa, cnpj: e.target.value }
                           }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       
@@ -1144,7 +1284,7 @@ export default function InspecaoEletrica() {
                             ...prev,
                             empresa: { ...prev.empresa, endereco: e.target.value }
                           }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       
@@ -1157,7 +1297,7 @@ export default function InspecaoEletrica() {
                             ...prev,
                             empresa: { ...prev.empresa, telefone: e.target.value }
                           }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       
@@ -1170,7 +1310,7 @@ export default function InspecaoEletrica() {
                             ...prev,
                             empresa: { ...prev.empresa, email: e.target.value }
                           }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                     </div>
@@ -1229,9 +1369,13 @@ export default function InspecaoEletrica() {
                 <button
                   onClick={addAreaWithSelectedItems}
                   disabled={selectedItems.length === 0}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    selectedItems.length > 0 
+                      ? 'bg-green-600 text-white hover:bg-green-700' 
+                      : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                  }`}
                 >
-                  Criar Área com Itens Selecionados
+                  Criar Área com Itens Selecionados ({selectedItems.length})
                 </button>
               </div>
             </div>
@@ -1244,14 +1388,16 @@ export default function InspecaoEletrica() {
                 key={item.id} 
                 className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
                   selectedItems.includes(item.id) ? 'bg-blue-50' : ''
-                } hover:bg-blue-100 transition-colors cursor-pointer`}
-                onClick={() => toggleItemSelection(item.id)}
+                } hover:bg-blue-100 transition-colors`}
               >
                 <td className="px-4 py-4 whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={selectedItems.includes(item.id)}
-                    onChange={() => toggleItemSelection(item.id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleItemSelection(item.id);
+                    }}
                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
                 </td>
@@ -1474,9 +1620,8 @@ export default function InspecaoEletrica() {
                   type="text"
                   value={novaInspecao.nome}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, nome: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Empresa ABC Ltda"
-                  maxLength={undefined}
                 />
               </div>
 
@@ -1488,9 +1633,8 @@ export default function InspecaoEletrica() {
                   type="text"
                   value={novaInspecao.numeroContrato}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, numeroContrato: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: CT-2024-001"
-                  maxLength={undefined}
                 />
               </div>
 
@@ -1502,7 +1646,7 @@ export default function InspecaoEletrica() {
                   type="text"
                   value={novaInspecao.engenheiroResponsavel}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, engenheiroResponsavel: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: João Silva - CREA 123456"
                 />
               </div>
@@ -1515,7 +1659,7 @@ export default function InspecaoEletrica() {
                   type="text"
                   value={novaInspecao.responsavelCliente}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, responsavelCliente: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Maria Santos - Gerente de Manutenção"
                 />
               </div>
@@ -1528,7 +1672,7 @@ export default function InspecaoEletrica() {
                   type="date"
                   value={novaInspecao.data}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, data: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -1612,7 +1756,7 @@ export default function InspecaoEletrica() {
                     value={novaArea}
                     onChange={(e) => setNovaArea(e.target.value)}
                     placeholder="Nome da área (ex: Subestação Principal)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <div className="flex gap-3">
@@ -1850,13 +1994,13 @@ export default function InspecaoEletrica() {
                           </select>
                         </td>
 
-                        {/* Comentário */}
+                        {/* Comentário - REMOVIDA LIMITAÇÃO DE CARACTERES */}
                         <td className="px-4 py-4">
                           <textarea
                             value={item.comentario}
                             onChange={(e) => updateItem(currentArea.id, item.id, 'comentario', e.target.value)}
                             placeholder="Adicione observações..."
-                            className="w-full min-w-[200px] px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                            className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                             rows={2}
                           />
                         </td>
