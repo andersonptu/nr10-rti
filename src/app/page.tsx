@@ -39,12 +39,13 @@ interface Area {
 
 interface Inspecao {
   id: string;
-  nome: string;
+  nomeCliente: string;
   numeroContrato: string;
   engenheiroResponsavel: string;
   responsavelCliente: string;
+  dataInspecao: string;
+  observacao: string;
   numeroSequencial: string;
-  data: string;
   areas: Area[];
   status: 'Em Andamento' | 'Concluída' | 'Pendente';
   createdAt: string;
@@ -176,13 +177,14 @@ export default function InspecaoEletrica() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Estados para nova inspeção
+  // Estados para nova inspeção - CAMPOS ATUALIZADOS
   const [novaInspecao, setNovaInspecao] = useState({
-    nome: '',
+    nomeCliente: '',
     numeroContrato: '',
     engenheiroResponsavel: '',
     responsavelCliente: '',
-    data: new Date().toISOString().split('T')[0]
+    dataInspecao: new Date().toISOString().split('T')[0],
+    observacao: ''
   });
 
   // Estados para nova área
@@ -248,7 +250,7 @@ export default function InspecaoEletrica() {
   };
 
   const createNewInspecao = () => {
-    if (!novaInspecao.nome || !novaInspecao.numeroContrato || !novaInspecao.engenheiroResponsavel || !novaInspecao.responsavelCliente) {
+    if (!novaInspecao.nomeCliente || !novaInspecao.numeroContrato || !novaInspecao.engenheiroResponsavel || !novaInspecao.responsavelCliente) {
       alert('Preencha todos os campos obrigatórios');
       return;
     }
@@ -258,12 +260,13 @@ export default function InspecaoEletrica() {
 
     const inspecao: Inspecao = {
       id: Date.now().toString(),
-      nome: novaInspecao.nome,
+      nomeCliente: novaInspecao.nomeCliente,
       numeroContrato: novaInspecao.numeroContrato,
       engenheiroResponsavel: novaInspecao.engenheiroResponsavel,
       responsavelCliente: novaInspecao.responsavelCliente,
+      dataInspecao: novaInspecao.dataInspecao,
+      observacao: novaInspecao.observacao,
       numeroSequencial: numeroSequencial,
-      data: novaInspecao.data,
       areas: [],
       status: 'Em Andamento',
       createdAt: new Date().toISOString()
@@ -275,11 +278,12 @@ export default function InspecaoEletrica() {
     
     // Reset form
     setNovaInspecao({
-      nome: '',
+      nomeCliente: '',
       numeroContrato: '',
       engenheiroResponsavel: '',
       responsavelCliente: '',
-      data: new Date().toISOString().split('T')[0]
+      dataInspecao: new Date().toISOString().split('T')[0],
+      observacao: ''
     });
 
     // Mostrar mensagem com o número sequencial gerado
@@ -549,7 +553,7 @@ export default function InspecaoEletrica() {
       yPosition += 10;
       
       pdf.setFontSize(14);
-      pdf.text(currentInspecao.nome, pageWidth / 2, yPosition, { align: 'center' });
+      pdf.text(currentInspecao.nomeCliente, pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 8;
       
       pdf.setFontSize(12);
@@ -566,12 +570,18 @@ export default function InspecaoEletrica() {
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
       const infoData = [
-        `Contrato: ${currentInspecao.numeroContrato}`,
+        `Nome do Cliente: ${currentInspecao.nomeCliente}`,
+        `Número do Contrato: ${currentInspecao.numeroContrato}`,
         `Engenheiro Responsável: ${currentInspecao.engenheiroResponsavel}`,
         `Responsável do Cliente: ${currentInspecao.responsavelCliente}`,
-        `Data: ${new Date(currentInspecao.data).toLocaleDateString('pt-BR')}`,
+        `Data da Inspeção: ${new Date(currentInspecao.dataInspecao).toLocaleDateString('pt-BR')}`,
         `Status: ${currentInspecao.status}`
       ];
+      
+      // Adicionar observação se existir
+      if (currentInspecao.observacao && currentInspecao.observacao.trim()) {
+        infoData.push(`Observação: ${currentInspecao.observacao}`);
+      }
       
       infoData.forEach(info => {
         pdf.text(info, margin, yPosition);
@@ -655,7 +665,7 @@ export default function InspecaoEletrica() {
       pdf.text('Sistema: PA BRASIL AUTOMAÇÃO - Inspeção Elétrica NR-10', margin, yPosition);
       
       // Nome do arquivo com extensão .pdf
-      const fileName = `relatorio-${currentInspecao.nome.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `relatorio-${currentInspecao.nomeCliente.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
       
       // Salvar o PDF
       pdf.save(fileName);
@@ -1485,7 +1495,7 @@ export default function InspecaoEletrica() {
                   return (
                     <tr key={inspecao.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4">
-                        <div className="font-semibold text-gray-900">{inspecao.nome}</div>
+                        <div className="font-semibold text-gray-900">{inspecao.nomeCliente}</div>
                         <div className="text-sm text-blue-600 font-mono">{inspecao.numeroSequencial}</div>
                         <div className="text-xs text-gray-500">{inspecao.areas.length} área(s)</div>
                       </td>
@@ -1503,7 +1513,7 @@ export default function InspecaoEletrica() {
                       </td>
                       
                       <td className="px-4 py-4 text-sm text-gray-700">
-                        {new Date(inspecao.data).toLocaleDateString('pt-BR')}
+                        {new Date(inspecao.dataInspecao).toLocaleDateString('pt-BR')}
                       </td>
                       
                       <td className="px-4 py-4">
@@ -1618,8 +1628,8 @@ export default function InspecaoEletrica() {
                 </label>
                 <input
                   type="text"
-                  value={novaInspecao.nome}
-                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, nome: e.target.value }))}
+                  value={novaInspecao.nomeCliente}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, nomeCliente: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Empresa ABC Ltda"
                 />
@@ -1664,15 +1674,28 @@ export default function InspecaoEletrica() {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Data da Inspeção *
                 </label>
                 <input
                   type="date"
-                  value={novaInspecao.data}
-                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, data: e.target.value }))}
+                  value={novaInspecao.dataInspecao}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, dataInspecao: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observação
+                </label>
+                <textarea
+                  value={novaInspecao.observacao}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, observacao: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Observações gerais sobre a inspeção..."
+                  rows={3}
                 />
               </div>
             </div>
@@ -1713,14 +1736,19 @@ export default function InspecaoEletrica() {
                   <Home className="w-6 h-6" />
                 </button>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{currentInspecao.nome}</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{currentInspecao.nomeCliente}</h1>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-2">
                     <span>Contrato: {currentInspecao.numeroContrato}</span>
                     <span>Responsável: {currentInspecao.engenheiroResponsavel}</span>
                     <span>Cliente: {currentInspecao.responsavelCliente}</span>
                     <span className="font-medium text-blue-600">{currentInspecao.numeroSequencial}</span>
-                    <span>Data: {new Date(currentInspecao.data).toLocaleDateString('pt-BR')}</span>
+                    <span>Data: {new Date(currentInspecao.dataInspecao).toLocaleDateString('pt-BR')}</span>
                   </div>
+                  {currentInspecao.observacao && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      <span className="font-medium">Observação:</span> {currentInspecao.observacao}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1862,7 +1890,7 @@ export default function InspecaoEletrica() {
                 </button>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">
-                    {currentArea.nome} - {currentInspecao.nome}
+                    {currentArea.nome} - {currentInspecao.nomeCliente}
                   </h1>
                   <p className="text-gray-600">
                     Checklist NR-10 com {currentArea.items.length} itens de inspeção elétrica
