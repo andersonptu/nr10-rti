@@ -34,10 +34,24 @@ interface ChecklistItem {
   precisaImagem: boolean; // Nova propriedade para indicar se o item precisa de imagem padrão
 }
 
+// Nova interface para itens de painéis elétricos
+interface PainelEletricoItem {
+  id: number;
+  norma: string;
+  descricao: string;
+  condicao: 'C' | 'NC' | 'NA' | '';
+  observacao: string;
+  recomendacao: string;
+  medias: MediaFile[];
+  selected: boolean;
+}
+
 interface Area {
   id: string;
   nome: string;
   items: ChecklistItem[];
+  painelItems?: PainelEletricoItem[]; // Nova propriedade para itens de painéis
+  tipoChecklist: 'subestacoes' | 'paineis'; // Tipo do checklist
 }
 
 interface Localizacao {
@@ -194,8 +208,32 @@ const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'np
   { id: 75, norma: "NR10.15.4", descricao: "São considerados autorizados os trabalhadores qualificados ou capacitados com anuência formal da empresa?" }
 ];
 
+// Novos itens para painéis elétricos
+const painelEletricoItems: Omit<PainelEletricoItem, 'condicao' | 'observacao' | 'recomendacao' | 'medias' | 'selected'>[] = [
+  { id: 1, norma: "NBR 5410", descricao: "O painel está identificado: Possui TAG, Etiqueta com nível de tensão, Advertência quanto aos riscos elétricos." },
+  { id: 2, norma: "NBR 5410", descricao: "O painel possui chave para bloqueio elétrico?" },
+  { id: 3, norma: "NR-10", descricao: "Existe sinalização restringindo o acesso a pessoas não autorizados?" },
+  { id: 4, norma: "NBR 5410", descricao: "O painel esta protegido contra entrada de animais?" },
+  { id: 5, norma: "NBR 5410", descricao: "O painel possui diagrama elétrico?" },
+  { id: 6, norma: "NBR 5410", descricao: "O painel possui botoeira de emergência?" },
+  { id: 7, norma: "NBR 5410", descricao: "O painel possui proteção contra intempéries (chuva, sol)?" },
+  { id: 8, norma: "NR-10", descricao: "O painel está trancado, impedindo acesso a pessoas não autorizados?" },
+  { id: 9, norma: "NBR 5410", descricao: "O painel possui disjuntor DR?" },
+  { id: 10, norma: "NBR 5410", descricao: "O painel está limpo e a fiação organizada nas canaletas?" },
+  { id: 11, norma: "NBR 5410", descricao: "O painel possui iluminação?" },
+  { id: 12, norma: "NBR 5410", descricao: "O painel está livre de qualquer objeto no seu interior?" },
+  { id: 13, norma: "NBR 5410", descricao: "As partes vivas estão protegidas contra contato acidental?" },
+  { id: 14, norma: "NBR 5410", descricao: "Os cabos, disjuntores e chaves estão identificados?" },
+  { id: 15, norma: "NBR 5410", descricao: "No painel existe identificação dos circuitos?" },
+  { id: 16, norma: "NBR 5410", descricao: "O painel e porta possuem aterramento?" },
+  { id: 17, norma: "NR-17", descricao: "O painel está a uma altura ergonômica?" },
+  { id: 18, norma: "NR-10", descricao: "O acesso ao painel está livre de obstáculos?" },
+  { id: 19, norma: "NBR 5410", descricao: "As cores dos cabos estão dentro do padrão?" },
+  { id: 20, norma: "NBR 5410", descricao: "As tomadas externas estão identificadas?" }
+];
+
 export default function InspecaoEletrica() {
-  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'selecionar-itens' | 'configuracoes' | 'dashboard' | 'gerenciar-imagens'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'selecionar-itens' | 'configuracoes' | 'dashboard' | 'gerenciar-imagens' | 'selecionar-tipo-checklist'>('home');
   const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
   const [currentInspecao, setCurrentInspecao] = useState<Inspecao | null>(null);
   const [currentArea, setCurrentArea] = useState<Area | null>(null);
@@ -225,6 +263,7 @@ export default function InspecaoEletrica() {
   const [showNovaAreaForm, setShowNovaAreaForm] = useState(false);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [selectAllItems, setSelectAllItems] = useState(true);
+  const [tipoChecklistSelecionado, setTipoChecklistSelecionado] = useState<'subestacoes' | 'paineis'>('subestacoes');
 
   // Estados para gerenciamento de imagens padrão
   const [imagensPadrao, setImagensPadrao] = useState<ImagemPadraoItem[]>([]);
@@ -351,21 +390,25 @@ export default function InspecaoEletrica() {
     alert('Imagem padrão atualizada com sucesso!');
   };
 
-  // Função para alternar seleção de item para imagem padrão
+  // Função para alternar seleção de item para imagem padrão - CORRIGIDA
   const toggleItemImagemPadrao = (itemId: number) => {
+    const isCurrentlySelected = configuracaoImagensPadrao.itensSelecionados.includes(itemId);
+    
+    // Atualizar estado das imagens padrão
     setImagensPadrao(prev => prev.map(item => 
-      item.id === itemId ? { ...item, precisaImagem: !item.precisaImagem } : item
+      item.id === itemId ? { ...item, precisaImagem: !isCurrentlySelected } : item
     ));
 
+    // Atualizar configuração de itens selecionados
     setConfiguracaoImagensPadrao(prev => ({
       ...prev,
-      itensSelecionados: prev.itensSelecionados.includes(itemId)
+      itensSelecionados: isCurrentlySelected
         ? prev.itensSelecionados.filter(id => id !== itemId)
         : [...prev.itensSelecionados, itemId]
     }));
   };
 
-  // Função para selecionar/deselecionar todos os itens para imagem padrão
+  // Função para selecionar/deselecionar todos os itens para imagem padrão - CORRIGIDA
   const toggleAllItemsImagemPadrao = () => {
     const todosIds = imagensPadrao.map(item => item.id);
     const todosSelecionados = configuracaoImagensPadrao.itensSelecionados.length === todosIds.length;
@@ -381,10 +424,15 @@ export default function InspecaoEletrica() {
     }
   };
 
-  // Função para salvar configuração de imagens padrão
+  // Função para salvar configuração de imagens padrão - CORRIGIDA
   const salvarConfiguracaoImagensPadrao = () => {
-    localStorage.setItem('configuracao-imagens-padrao', JSON.stringify(configuracaoImagensPadrao));
-    alert(`Configuração salva com sucesso!\n${configuracaoImagensPadrao.itensSelecionados.length} itens selecionados para receber imagem padrão em novas inspeções.`);
+    try {
+      localStorage.setItem('configuracao-imagens-padrao', JSON.stringify(configuracaoImagensPadrao));
+      alert(`Configuração salva com sucesso!\n${configuracaoImagensPadrao.itensSelecionados.length} itens selecionados para receber imagem padrão em novas inspeções.`);
+    } catch (error) {
+      console.error('Erro ao salvar configuração:', error);
+      alert('Erro ao salvar configuração. Tente novamente.');
+    }
   };
 
   // Filtrar imagens baseado na busca e categoria
@@ -631,31 +679,44 @@ export default function InspecaoEletrica() {
   };
 
   const showItemSelection = () => {
-    setSelectedItems(checklistItems.map(item => item.id)); // Selecionar todos por padrão
+    setCurrentView('selecionar-tipo-checklist');
+  };
+
+  const showItemSelectionForType = (tipo: 'subestacoes' | 'paineis') => {
+    setTipoChecklistSelecionado(tipo);
+    if (tipo === 'subestacoes') {
+      setSelectedItems(checklistItems.map(item => item.id)); // Selecionar todos por padrão
+    } else {
+      setSelectedItems(painelEletricoItems.map(item => item.id)); // Selecionar todos por padrão
+    }
     setSelectAllItems(true);
     setCurrentView('selecionar-itens');
   };
 
   const toggleSelectAll = () => {
+    const itemsToSelect = tipoChecklistSelecionado === 'subestacoes' ? checklistItems : painelEletricoItems;
+    
     if (selectAllItems) {
       // Se todos estão selecionados, desmarcar todos
       setSelectedItems([]);
       setSelectAllItems(false);
     } else {
       // Se nem todos estão selecionados, selecionar todos
-      setSelectedItems(checklistItems.map(item => item.id));
+      setSelectedItems(itemsToSelect.map(item => item.id));
       setSelectAllItems(true);
     }
   };
 
   const toggleItemSelection = (itemId: number) => {
+    const itemsToSelect = tipoChecklistSelecionado === 'subestacoes' ? checklistItems : painelEletricoItems;
+    
     setSelectedItems(prev => {
       const newSelection = prev.includes(itemId) 
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId];
       
       // Atualizar o estado do "Selecionar Todos" baseado na nova seleção
-      setSelectAllItems(newSelection.length === checklistItems.length);
+      setSelectAllItems(newSelection.length === itemsToSelect.length);
       return newSelection;
     });
   };
@@ -668,50 +729,88 @@ export default function InspecaoEletrica() {
       return;
     }
 
-    // Criar checklist apenas com os itens selecionados
-    const checklistSelecionado: ChecklistItem[] = checklistItems
-      .filter(item => selectedItems.includes(item.id))
-      .map(item => {
-        const imagemItem = imagensPadrao.find(img => img.id === item.id);
-        const precisaImagem = configuracaoImagensPadrao.itensSelecionados.includes(item.id);
-        
-        return {
+    if (tipoChecklistSelecionado === 'subestacoes') {
+      // Criar checklist apenas com os itens selecionados (75 itens NR-10)
+      const checklistSelecionado: ChecklistItem[] = checklistItems
+        .filter(item => selectedItems.includes(item.id))
+        .map(item => {
+          const imagemItem = imagensPadrao.find(img => img.id === item.id);
+          const precisaImagem = configuracaoImagensPadrao.itensSelecionados.includes(item.id);
+          
+          return {
+            id: item.id,
+            norma: item.norma,
+            descricao: item.descricao,
+            condicao: '',
+            po: '',
+            fe: '',
+            gsd: '',
+            nper: '',
+            recomendacoes: '',
+            imagemPadrao: precisaImagem ? (imagemItem?.imagemPadrao || getDefaultImageForItem(item.id)) : '',
+            medias: [],
+            selected: true,
+            precisaImagem: precisaImagem
+          };
+        });
+
+      const area: Area = {
+        id: Date.now().toString(),
+        nome: novaArea,
+        items: checklistSelecionado,
+        tipoChecklist: 'subestacoes'
+      };
+
+      const updatedInspecao = {
+        ...currentInspecao,
+        areas: [...currentInspecao.areas, area]
+      };
+
+      setCurrentInspecao(updatedInspecao);
+      setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+      setNovaArea('');
+      setShowNovaAreaForm(false);
+      setCurrentView('inspecao');
+      
+      // Mostrar mensagem de confirmação
+      const itensComImagem = checklistSelecionado.filter(item => item.precisaImagem).length;
+      alert(`Área "${novaArea}" criada com sucesso!\nCheck List para Subestações com ${selectedItems.length} itens NR-10 selecionados.\n${itensComImagem} itens receberão imagem padrão.`);
+    } else {
+      // Criar checklist para painéis elétricos (20 itens)
+      const painelSelecionado: PainelEletricoItem[] = painelEletricoItems
+        .filter(item => selectedItems.includes(item.id))
+        .map(item => ({
           id: item.id,
           norma: item.norma,
           descricao: item.descricao,
           condicao: '',
-          po: '',
-          fe: '',
-          gsd: '',
-          nper: '',
-          recomendacoes: '',
-          imagemPadrao: precisaImagem ? (imagemItem?.imagemPadrao || getDefaultImageForItem(item.id)) : '',
+          observacao: '',
+          recomendacao: '',
           medias: [],
-          selected: true,
-          precisaImagem: precisaImagem
-        };
-      });
+          selected: true
+        }));
 
-    const area: Area = {
-      id: Date.now().toString(),
-      nome: novaArea,
-      items: checklistSelecionado
-    };
+      const area: Area = {
+        id: Date.now().toString(),
+        nome: novaArea,
+        items: [], // Vazio para painéis
+        painelItems: painelSelecionado,
+        tipoChecklist: 'paineis'
+      };
 
-    const updatedInspecao = {
-      ...currentInspecao,
-      areas: [...currentInspecao.areas, area]
-    };
+      const updatedInspecao = {
+        ...currentInspecao,
+        areas: [...currentInspecao.areas, area]
+      };
 
-    setCurrentInspecao(updatedInspecao);
-    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
-    setNovaArea('');
-    setShowNovaAreaForm(false);
-    setCurrentView('inspecao');
-    
-    // Mostrar mensagem de confirmação
-    const itensComImagem = checklistSelecionado.filter(item => item.precisaImagem).length;
-    alert(`Área "${novaArea}" criada com sucesso!\nChecklist com ${selectedItems.length} itens NR-10 selecionados.\n${itensComImagem} itens receberão imagem padrão.`);
+      setCurrentInspecao(updatedInspecao);
+      setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+      setNovaArea('');
+      setShowNovaAreaForm(false);
+      setCurrentView('inspecao');
+      
+      alert(`Área "${novaArea}" criada com sucesso!\nChecklist para Quadros Elétricos com ${selectedItems.length} itens selecionados.`);
+    }
   };
 
   const addArea = () => {
@@ -742,7 +841,8 @@ export default function InspecaoEletrica() {
     const area: Area = {
       id: Date.now().toString(),
       nome: novaArea,
-      items: checklistCompleto
+      items: checklistCompleto,
+      tipoChecklist: 'subestacoes'
     };
 
     const updatedInspecao = {
@@ -757,7 +857,7 @@ export default function InspecaoEletrica() {
     
     // Mostrar mensagem de confirmação
     const itensComImagem = checklistCompleto.filter(item => item.precisaImagem).length;
-    alert(`Área "${novaArea}" criada com sucesso!\nChecklist completo com 75 itens NR-10 adicionado.\n${itensComImagem} itens receberão imagem padrão.`);
+    alert(`Área "${novaArea}" criada com sucesso!\nCheck List para Subestações completo com 75 itens NR-10 adicionado.\n${itensComImagem} itens receberão imagem padrão.`);
   };
 
   const updateItem = (areaId: string, itemId: number, field: keyof ChecklistItem, value: any) => {
@@ -781,7 +881,28 @@ export default function InspecaoEletrica() {
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
   };
 
-  const handleFileUpload = (areaId: string, itemId: number, files: FileList | null, type: 'image' | 'video' | 'audio') => {
+  const updatePainelItem = (areaId: string, itemId: number, field: keyof PainelEletricoItem, value: any) => {
+    if (!currentInspecao) return;
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: currentInspecao.areas.map(area => 
+        area.id === areaId 
+          ? {
+              ...area,
+              painelItems: area.painelItems?.map(item => 
+                item.id === itemId ? { ...item, [field]: value } : item
+              )
+            }
+          : area
+      )
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+  };
+
+  const handleFileUpload = (areaId: string, itemId: number, files: FileList | null, type: 'image' | 'video' | 'audio', isPainel: boolean = false) => {
     if (!files || !currentInspecao) return;
 
     Array.from(files).forEach(file => {
@@ -794,20 +915,32 @@ export default function InspecaoEletrica() {
         size: file.size
       };
 
-      updateItem(areaId, itemId, 'medias', 
-        currentInspecao.areas.find(a => a.id === areaId)?.items.find(i => i.id === itemId)?.medias.concat(mediaFile) || [mediaFile]
-      );
+      if (isPainel) {
+        updatePainelItem(areaId, itemId, 'medias', 
+          currentInspecao.areas.find(a => a.id === areaId)?.painelItems?.find(i => i.id === itemId)?.medias.concat(mediaFile) || [mediaFile]
+        );
+      } else {
+        updateItem(areaId, itemId, 'medias', 
+          currentInspecao.areas.find(a => a.id === areaId)?.items.find(i => i.id === itemId)?.medias.concat(mediaFile) || [mediaFile]
+        );
+      }
     });
   };
 
-  const removeMedia = (areaId: string, itemId: number, mediaId: string) => {
+  const removeMedia = (areaId: string, itemId: number, mediaId: string, isPainel: boolean = false) => {
     if (!currentInspecao) return;
     
     const area = currentInspecao.areas.find(a => a.id === areaId);
-    const item = area?.items.find(i => i.id === itemId);
-    if (!item) return;
-
-    updateItem(areaId, itemId, 'medias', item.medias.filter(m => m.id !== mediaId));
+    
+    if (isPainel) {
+      const item = area?.painelItems?.find(i => i.id === itemId);
+      if (!item) return;
+      updatePainelItem(areaId, itemId, 'medias', item.medias.filter(m => m.id !== mediaId));
+    } else {
+      const item = area?.items.find(i => i.id === itemId);
+      if (!item) return;
+      updateItem(areaId, itemId, 'medias', item.medias.filter(m => m.id !== mediaId));
+    }
   };
 
   const openCamera = async (itemId: number) => {
@@ -852,9 +985,15 @@ export default function InspecaoEletrica() {
           size: file.size
         };
 
-        updateItem(currentArea.id, cameraOpen.itemId, 'medias', 
-          currentArea.items.find(i => i.id === cameraOpen.itemId)?.medias.concat(mediaFile) || [mediaFile]
-        );
+        if (currentArea.tipoChecklist === 'paineis') {
+          updatePainelItem(currentArea.id, cameraOpen.itemId, 'medias', 
+            currentArea.painelItems?.find(i => i.id === cameraOpen.itemId)?.medias.concat(mediaFile) || [mediaFile]
+          );
+        } else {
+          updateItem(currentArea.id, cameraOpen.itemId, 'medias', 
+            currentArea.items.find(i => i.id === cameraOpen.itemId)?.medias.concat(mediaFile) || [mediaFile]
+          );
+        }
       }
     }, 'image/jpeg', 0.8);
 
@@ -1125,83 +1264,146 @@ export default function InspecaoEletrica() {
         pdf.setFontSize(14);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(0, 0, 0);
-        pdf.text(`6.${areaIndex + 1} ÁREA: ${area.nome.toUpperCase()}`, margin, yPosition);
+        const tipoArea = area.tipoChecklist === 'paineis' ? 'QUADROS ELÉTRICOS' : 'SUBESTAÇÕES';
+        pdf.text(`6.${areaIndex + 1} ÁREA: ${area.nome.toUpperCase()} - ${tipoArea}`, margin, yPosition);
         yPosition += 12;
         
-        // Tabela de resultados
-        const tableStartY = yPosition;
-        const colWidths = [15, 25, 70, 15, 15, 15, 15, 15];
-        const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER'];
-        
-        // Cabeçalho da tabela
-        pdf.setFillColor(50, 50, 50);
-        pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
-        
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(255, 255, 255);
-        
-        let xPos = margin;
-        headers.forEach((header, i) => {
-          pdf.text(header, xPos + 2, yPosition + 5);
-          xPos += colWidths[i];
-        });
-        
-        yPosition += 8;
-        
-        // Dados da tabela
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(0, 0, 0);
-        
-        area.items.forEach((item, itemIndex) => {
-          checkPageBreak(12);
+        if (area.tipoChecklist === 'paineis' && area.painelItems) {
+          // Tabela para painéis elétricos
+          const tableStartY = yPosition;
+          const colWidths = [15, 25, 80, 15, 30, 30];
+          const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'Observação', 'Recomendação'];
           
-          // Cor de fundo alternada
-          if (itemIndex % 2 === 0) {
-            pdf.setFillColor(248, 248, 248);
-            pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
-          }
+          // Cabeçalho da tabela
+          pdf.setFillColor(50, 50, 50);
+          pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
           
-          xPos = margin;
-          const rowData = [
-            item.id.toString(),
-            item.norma,
-            item.descricao.length > 35 ? item.descricao.substring(0, 32) + '...' : item.descricao,
-            item.condicao || '-',
-            item.po || '-',
-            item.fe || '-',
-            item.gsd || '-',
-            item.nper || '-'
-          ];
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(255, 255, 255);
           
-          rowData.forEach((data, i) => {
-            pdf.text(data, xPos + 2, yPosition + 5);
-            xPos += colWidths[i];
-          });
-          
-          // Bordas da tabela
-          pdf.setDrawColor(200, 200, 200);
-          xPos = margin;
-          headers.forEach((_, i) => {
-            pdf.rect(xPos, yPosition, colWidths[i], 8);
+          let xPos = margin;
+          headers.forEach((header, i) => {
+            pdf.text(header, xPos + 2, yPosition + 5);
             xPos += colWidths[i];
           });
           
           yPosition += 8;
           
-          // Recomendações se existir
-          if (item.recomendacoes && item.recomendacoes.trim()) {
-            checkPageBreak(8);
-            pdf.setFontSize(7);
-            pdf.setFont('helvetica', 'italic');
-            pdf.setTextColor(100, 100, 100);
-            pdf.text(`Recomendações: ${item.recomendacoes}`, margin + 2, yPosition + 4);
-            pdf.setFontSize(8);
-            pdf.setFont('helvetica', 'normal');
-            pdf.setTextColor(0, 0, 0);
-            yPosition += 6;
-          }
-        });
+          // Dados da tabela
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(0, 0, 0);
+          
+          area.painelItems.forEach((item, itemIndex) => {
+            checkPageBreak(12);
+            
+            // Cor de fundo alternada
+            if (itemIndex % 2 === 0) {
+              pdf.setFillColor(248, 248, 248);
+              pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+            }
+            
+            xPos = margin;
+            const rowData = [
+              item.id.toString(),
+              item.norma,
+              item.descricao.length > 40 ? item.descricao.substring(0, 37) + '...' : item.descricao,
+              item.condicao || '-',
+              item.observacao.length > 15 ? item.observacao.substring(0, 12) + '...' : item.observacao || '-',
+              item.recomendacao.length > 15 ? item.recomendacao.substring(0, 12) + '...' : item.recomendacao || '-'
+            ];
+            
+            rowData.forEach((data, i) => {
+              pdf.text(data, xPos + 2, yPosition + 5);
+              xPos += colWidths[i];
+            });
+            
+            // Bordas da tabela
+            pdf.setDrawColor(200, 200, 200);
+            xPos = margin;
+            headers.forEach((_, i) => {
+              pdf.rect(xPos, yPosition, colWidths[i], 8);
+              xPos += colWidths[i];
+            });
+            
+            yPosition += 8;
+          });
+        } else {
+          // Tabela para subestações (75 itens NR-10)
+          const tableStartY = yPosition;
+          const colWidths = [15, 25, 70, 15, 15, 15, 15, 15];
+          const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER'];
+          
+          // Cabeçalho da tabela
+          pdf.setFillColor(50, 50, 50);
+          pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+          
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(255, 255, 255);
+          
+          let xPos = margin;
+          headers.forEach((header, i) => {
+            pdf.text(header, xPos + 2, yPosition + 5);
+            xPos += colWidths[i];
+          });
+          
+          yPosition += 8;
+          
+          // Dados da tabela
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(0, 0, 0);
+          
+          area.items.forEach((item, itemIndex) => {
+            checkPageBreak(12);
+            
+            // Cor de fundo alternada
+            if (itemIndex % 2 === 0) {
+              pdf.setFillColor(248, 248, 248);
+              pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+            }
+            
+            xPos = margin;
+            const rowData = [
+              item.id.toString(),
+              item.norma,
+              item.descricao.length > 35 ? item.descricao.substring(0, 32) + '...' : item.descricao,
+              item.condicao || '-',
+              item.po || '-',
+              item.fe || '-',
+              item.gsd || '-',
+              item.nper || '-'
+            ];
+            
+            rowData.forEach((data, i) => {
+              pdf.text(data, xPos + 2, yPosition + 5);
+              xPos += colWidths[i];
+            });
+            
+            // Bordas da tabela
+            pdf.setDrawColor(200, 200, 200);
+            xPos = margin;
+            headers.forEach((_, i) => {
+              pdf.rect(xPos, yPosition, colWidths[i], 8);
+              xPos += colWidths[i];
+            });
+            
+            yPosition += 8;
+            
+            // Recomendações se existir
+            if (item.recomendacoes && item.recomendacoes.trim()) {
+              checkPageBreak(8);
+              pdf.setFontSize(7);
+              pdf.setFont('helvetica', 'italic');
+              pdf.setTextColor(100, 100, 100);
+              pdf.text(`Recomendações: ${item.recomendacoes}`, margin + 2, yPosition + 4);
+              pdf.setFontSize(8);
+              pdf.setFont('helvetica', 'normal');
+              pdf.setTextColor(0, 0, 0);
+              yPosition += 6;
+            }
+          });
+        }
         
         yPosition += 15;
       });
@@ -1237,7 +1439,7 @@ export default function InspecaoEletrica() {
       pdf.save(fileName);
       
       // Mostrar mensagem de sucesso
-      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}\n\nEstrutura profissional aplicada conforme especificações:\n✓ Marca d'água PA Brasil\n✓ Logo do cliente\n✓ Cabeçalho e rodapé profissionais\n✓ Numeração de páginas\n✓ Sumário estruturado`);
+      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}\n\nEstrutura profissional aplicada conforme especificações:\n✓ Marca d'água PA Brasil\n✓ Logo do cliente\n✓ Cabeçalho e rodapé profissionais\n✓ Numeração de páginas\n✓ Sumário estruturado\n✓ Suporte para ambos os tipos de checklist`);
       
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
@@ -1270,33 +1472,59 @@ export default function InspecaoEletrica() {
     let naoAplicaveis = 0;
 
     inspecao.areas.forEach(area => {
-      area.items.forEach(item => {
-        totalItems++;
-        if (item.condicao === 'C') conformes++;
-        else if (item.condicao === 'NC') naoConformes++;
-        else if (item.condicao === 'NA') naoAplicaveis++;
-      });
+      if (area.tipoChecklist === 'paineis' && area.painelItems) {
+        area.painelItems.forEach(item => {
+          totalItems++;
+          if (item.condicao === 'C') conformes++;
+          else if (item.condicao === 'NC') naoConformes++;
+          else if (item.condicao === 'NA') naoAplicaveis++;
+        });
+      } else {
+        area.items.forEach(item => {
+          totalItems++;
+          if (item.condicao === 'C') conformes++;
+          else if (item.condicao === 'NC') naoConformes++;
+          else if (item.condicao === 'NA') naoAplicaveis++;
+        });
+      }
     });
 
     return { totalItems, conformes, naoConformes, naoAplicaveis };
   };
 
   const canCompleteInspection = (area: Area) => {
-    const totalItems = area.items.length;
-    const completedItems = area.items.filter(item => 
-      item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
-    ).length;
-    
-    return completedItems > 0; // Permite concluir se pelo menos um item foi preenchido
+    if (area.tipoChecklist === 'paineis' && area.painelItems) {
+      const totalItems = area.painelItems.length;
+      const completedItems = area.painelItems.filter(item => 
+        item.condicao !== '' || item.observacao !== '' || item.recomendacao !== ''
+      ).length;
+      return completedItems > 0;
+    } else {
+      const totalItems = area.items.length;
+      const completedItems = area.items.filter(item => 
+        item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
+      ).length;
+      return completedItems > 0;
+    }
   };
 
   const completeInspection = (area: Area) => {
     if (!currentInspecao) return;
 
-    const totalItems = area.items.length;
-    const completedItems = area.items.filter(item => 
-      item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
-    ).length;
+    let totalItems = 0;
+    let completedItems = 0;
+
+    if (area.tipoChecklist === 'paineis' && area.painelItems) {
+      totalItems = area.painelItems.length;
+      completedItems = area.painelItems.filter(item => 
+        item.condicao !== '' || item.observacao !== '' || item.recomendacao !== ''
+      ).length;
+    } else {
+      totalItems = area.items.length;
+      completedItems = area.items.filter(item => 
+        item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
+      ).length;
+    }
 
     const incompleteItems = totalItems - completedItems;
 
@@ -1317,7 +1545,8 @@ export default function InspecaoEletrica() {
     setCurrentInspecao(updatedInspecao);
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
     
-    alert(`Inspeção da área "${area.nome}" concluída com sucesso!\n${completedItems} de ${totalItems} itens foram preenchidos.`);
+    const tipoArea = area.tipoChecklist === 'paineis' ? 'Quadros Elétricos' : 'Subestações';
+    alert(`Inspeção da área "${area.nome}" (${tipoArea}) concluída com sucesso!\n${completedItems} de ${totalItems} itens foram preenchidos.`);
     setCurrentView('inspecao');
   };
 
@@ -1497,6 +1726,123 @@ export default function InspecaoEletrica() {
       {children}
     </div>
   );
+
+  // Renderização da tela de seleção de tipo de checklist
+  if (currentView === 'selecionar-tipo-checklist') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Cabeçalho Profissional */}
+        <ProfessionalHeader 
+          title="SELEÇÃO DO TIPO DE CHECKLIST" 
+          subtitle={`Área: ${novaArea} - Escolha o Tipo de Inspeção`}
+        />
+
+        <div className="max-w-4xl mx-auto p-6">
+          {/* Botão de Navegação */}
+          <div className="mb-6">
+            <button
+              onClick={() => setCurrentView('inspecao')}
+              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
+            >
+              <Home className="w-5 h-5" />
+              Voltar à Inspeção
+            </button>
+          </div>
+
+          <NumberedSection number="1" title="ESCOLHA O TIPO DE CHECKLIST">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Opção 1: Check List para Subestações */}
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Building className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-blue-900 mb-2">Check List para Subestações</h3>
+                  <p className="text-blue-700 text-sm">Inspeção completa baseada na NR-10</p>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">75 itens de verificação NR-10</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Subestações, Salas Elétricas, CCMs e QGBT</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Colunas: Condição, PO, FE, GSD, NPER</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Imagens padrão configuráveis</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => showItemSelectionForType('subestacoes')}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Selecionar Itens NR-10 (75 itens)
+                </button>
+              </div>
+
+              {/* Opção 2: Checklist para Quadros Elétricos */}
+              <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-green-600 text-white rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Settings className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-green-900 mb-2">Checklist para Quadros Elétricos</h3>
+                  <p className="text-green-700 text-sm">Inspeção específica para painéis elétricos</p>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">20 itens específicos para painéis</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Quadros elétricos e painéis de comando</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Colunas: Condição, Observação, Recomendação</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Normas NBR 5410 e NR-10</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => showItemSelectionForType('paineis')}
+                  className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  Selecionar Itens de Painéis (20 itens)
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <h5 className="font-medium text-yellow-900">Diferenças entre os Checklists</h5>
+                  <div className="text-yellow-800 text-sm mt-2 space-y-1">
+                    <p><strong>Check List para Subestações:</strong> Focado na conformidade geral com a NR-10, ideal para instalações de grande porte.</p>
+                    <p><strong>Checklist para Quadros Elétricos:</strong> Específico para painéis e quadros, com foco em aspectos práticos de segurança e organização.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </NumberedSection>
+        </div>
+      </div>
+    );
+  }
 
   // Renderização da tela de gerenciamento de imagens
   if (currentView === 'gerenciar-imagens') {
@@ -1998,7 +2344,8 @@ export default function InspecaoEletrica() {
               
               <h4 className="text-lg font-semibold text-gray-900 mb-2">3.1 Escopo da Inspeção</h4>
               <ul className="list-disc pl-6 mb-4 text-gray-700">
-                <li>Verificação de conformidade com os 75 itens da NR-10</li>
+                <li>Verificação de conformidade com os 75 itens da NR-10 (Check List para Subestações)</li>
+                <li>Inspeção específica de Quadros Elétricos com 20 itens técnicos</li>
                 <li>Análise de condições de segurança das instalações elétricas</li>
                 <li>Documentação fotográfica e registro de não conformidades</li>
                 <li>Elaboração de relatórios técnicos detalhados</li>
@@ -2007,7 +2354,7 @@ export default function InspecaoEletrica() {
               <h4 className="text-lg font-semibold text-gray-900 mb-2">3.2 Metodologia Aplicada</h4>
               <p className="text-gray-700 mb-4">
                 As inspeções são realizadas por profissionais qualificados, seguindo rigorosamente os procedimentos estabelecidos 
-                pela NR-10, garantindo a identificação precisa de riscos e não conformidades.
+                pela NR-10 e normas técnicas aplicáveis (NBR 5410, NR-17), garantindo a identificação precisa de riscos e não conformidades.
               </p>
             </div>
           </NumberedSection>
@@ -2253,12 +2600,15 @@ export default function InspecaoEletrica() {
 
   // Renderização da tela de seleção de itens
   if (currentView === 'selecionar-itens') {
+    const itemsToShow = tipoChecklistSelecionado === 'subestacoes' ? checklistItems : painelEletricoItems;
+    const tipoNome = tipoChecklistSelecionado === 'subestacoes' ? 'Check List para Subestações' : 'Checklist para Quadros Elétricos';
+    
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
           title="SELEÇÃO DE ITENS PARA INSPEÇÃO" 
-          subtitle={`Área: ${novaArea} - Checklist NR-10`}
+          subtitle={`Área: ${novaArea} - ${tipoNome}`}
         />
 
         <div className="max-w-7xl mx-auto p-6">
@@ -2278,16 +2628,16 @@ export default function InspecaoEletrica() {
                   {selectAllItems ? 'Desmarcar Todos' : 'Selecionar Todos'}
                 </button>
                 <span className="text-sm text-gray-600 font-medium">
-                  {selectedItems.length} de {checklistItems.length} itens selecionados
+                  {selectedItems.length} de {itemsToShow.length} itens selecionados
                 </span>
               </div>
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setCurrentView('inspecao')}
+                  onClick={() => setCurrentView('selecionar-tipo-checklist')}
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Cancelar
+                  Voltar
                 </button>
                 <button
                   onClick={addAreaWithSelectedItems}
@@ -2302,11 +2652,27 @@ export default function InspecaoEletrica() {
                 </button>
               </div>
             </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h5 className="font-medium text-blue-900">Tipo de Checklist Selecionado</h5>
+                  <p className="text-blue-800 text-sm mt-1">
+                    <strong>{tipoNome}</strong> - {itemsToShow.length} itens disponíveis para seleção.
+                    {tipoChecklistSelecionado === 'subestacoes' 
+                      ? ' Focado na conformidade geral com a NR-10 para subestações, salas elétricas, CCMs e QGBT.'
+                      : ' Específico para quadros elétricos com base na NBR 5410 e NR-10.'
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Tabela de Seleção */}
           <ProfessionalTable headers={['', 'Item', 'Norma', 'Descrição']}>
-            {checklistItems.map((item, index) => (
+            {itemsToShow.map((item, index) => (
               <tr 
                 key={item.id} 
                 className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
@@ -2413,7 +2779,11 @@ export default function InspecaoEletrica() {
                       <td className="px-4 py-4">
                         <div className="font-semibold text-gray-900">{inspecao.nome}</div>
                         <div className="text-sm text-blue-600 font-mono">{inspecao.numeroSequencial}</div>
-                        <div className="text-xs text-gray-500">{inspecao.areas.length} área(s)</div>
+                        <div className="text-xs text-gray-500">
+                          {inspecao.areas.length} área(s) - 
+                          {inspecao.areas.filter(a => a.tipoChecklist === 'subestacoes').length > 0 && ' Subestações'}
+                          {inspecao.areas.filter(a => a.tipoChecklist === 'paineis').length > 0 && ' Painéis'}
+                        </div>
                       </td>
                       
                       <td className="px-4 py-4 text-sm text-gray-900 font-mono">
@@ -2730,13 +3100,13 @@ export default function InspecaoEletrica() {
                     onClick={addArea}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
                   >
-                    Todos os Itens (75)
+                    Check List para Subestações (75 itens)
                   </button>
                   <button
                     onClick={showItemSelection}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    Selecionar Itens
+                    Selecionar Tipo e Itens
                   </button>
                   <button
                     onClick={() => {
@@ -2753,19 +3123,36 @@ export default function InspecaoEletrica() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {currentInspecao.areas.map(area => {
-                const stats = {
-                  total: area.items.length,
-                  conformes: area.items.filter(i => i.condicao === 'C').length,
-                  naoConformes: area.items.filter(i => i.condicao === 'NC').length,
-                  naoAplicaveis: area.items.filter(i => i.condicao === 'NA').length
-                };
+                let stats = { total: 0, conformes: 0, naoConformes: 0, naoAplicaveis: 0 };
+                
+                if (area.tipoChecklist === 'paineis' && area.painelItems) {
+                  stats.total = area.painelItems.length;
+                  stats.conformes = area.painelItems.filter(i => i.condicao === 'C').length;
+                  stats.naoConformes = area.painelItems.filter(i => i.condicao === 'NC').length;
+                  stats.naoAplicaveis = area.painelItems.filter(i => i.condicao === 'NA').length;
+                } else {
+                  stats.total = area.items.length;
+                  stats.conformes = area.items.filter(i => i.condicao === 'C').length;
+                  stats.naoConformes = area.items.filter(i => i.condicao === 'NC').length;
+                  stats.naoAplicaveis = area.items.filter(i => i.condicao === 'NA').length;
+                }
+                
                 const progresso = stats.total > 0 ? 
                   Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.total) * 100) : 0;
+
+                const tipoArea = area.tipoChecklist === 'paineis' ? 'Quadros Elétricos' : 'Subestações';
 
                 return (
                   <div key={area.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                     <h3 className="font-semibold text-gray-900 mb-2">{area.nome}</h3>
                     <div className="text-sm text-gray-600 mb-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          area.tipoChecklist === 'paineis' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {tipoArea}
+                        </span>
+                      </div>
                       <div>Total: {stats.total} itens</div>
                       <div className="flex gap-4 mt-1">
                         <span className="text-green-600">C: {stats.conformes}</span>
@@ -2812,8 +3199,11 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de checklist (mantém o layout original por ser funcional)
+  // Renderização da tela de checklist (atualizada para suportar ambos os tipos)
   if (currentView === 'checklist' && currentArea && currentInspecao) {
+    const isPainelChecklist = currentArea.tipoChecklist === 'paineis';
+    const tipoNome = isPainelChecklist ? 'Quadros Elétricos' : 'Check List para Subestações';
+    
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-7xl mx-auto">
@@ -2831,7 +3221,7 @@ export default function InspecaoEletrica() {
                     {currentArea.nome} - {currentInspecao.nome}
                   </h1>
                   <p className="text-gray-600">
-                    Checklist NR-10 com {currentArea.items.length} itens de inspeção elétrica
+                    {tipoNome} com {isPainelChecklist ? currentArea.painelItems?.length || 0 : currentArea.items.length} itens de inspeção elétrica
                   </p>
                 </div>
               </div>
@@ -2857,234 +3247,384 @@ export default function InspecaoEletrica() {
             <div className="overflow-x-auto">
               {/* Div invisível para forçar barra de rolagem no topo */}
               <div className="h-4 overflow-x-auto mb-2">
-                <div style={{ width: '1400px', height: '1px' }}></div>
+                <div style={{ width: isPainelChecklist ? '1200px' : '1400px', height: '1px' }}></div>
               </div>
               
               {/* Tabela principal */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1400px]">
+                <table className={`w-full ${isPainelChecklist ? 'min-w-[1200px]' : 'min-w-[1400px]'}`}>
                   <thead className="bg-gray-800 text-white sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Norma</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Descrição</th>
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Condição</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">PO</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">FE</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">GSD</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendações</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Imagem Padrão</th>
+                      {isPainelChecklist ? (
+                        <>
+                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Observação</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendação</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">PO</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">FE</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">GSD</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendações</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Imagem Padrão</th>
+                        </>
+                      )}
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {currentArea.items.map((item, index) => (
-                      <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.id}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-900 font-medium">
-                          {item.norma}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
-                          {item.descricao}
-                        </td>
-                        
-                        {/* Condição */}
-                        <td className="px-4 py-4 text-center">
-                          <select
-                            value={item.condicao}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                          >
-                            <option value="">-</option>
-                            <option value="C">C</option>
-                            <option value="NC">NC</option>
-                            <option value="NA">NA</option>
-                          </select>
-                        </td>
+                    {isPainelChecklist && currentArea.painelItems ? (
+                      // Renderização para painéis elétricos
+                      currentArea.painelItems.map((item, index) => (
+                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {item.id}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-900 font-medium">
+                            {item.norma}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
+                            {item.descricao}
+                          </td>
+                          
+                          {/* Condição */}
+                          <td className="px-4 py-4 text-center">
+                            <select
+                              value={item.condicao}
+                              onChange={(e) => updatePainelItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            >
+                              <option value="">-</option>
+                              <option value="C">C</option>
+                              <option value="NC">NC</option>
+                              <option value="NA">NA</option>
+                            </select>
+                          </td>
 
-                        {/* PO */}
-                        <td className="px-4 py-4 text-center">
-                          <select
-                            value={item.po}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.po)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                          >
-                            <option value="">-</option>
-                            <option value="C">C</option>
-                            <option value="NC">NC</option>
-                            <option value="NA">NA</option>
-                          </select>
-                        </td>
+                          {/* Observação */}
+                          <td className="px-4 py-4">
+                            <textarea
+                              value={item.observacao}
+                              onChange={(e) => updatePainelItem(currentArea.id, item.id, 'observacao', e.target.value)}
+                              placeholder="Adicione observações..."
+                              className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                              rows={2}
+                            />
+                          </td>
 
-                        {/* FE */}
-                        <td className="px-4 py-4 text-center">
-                          <select
-                            value={item.fe}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.fe)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                          >
-                            <option value="">-</option>
-                            <option value="C">C</option>
-                            <option value="NC">NC</option>
-                            <option value="NA">NA</option>
-                          </select>
-                        </td>
+                          {/* Recomendação */}
+                          <td className="px-4 py-4">
+                            <textarea
+                              value={item.recomendacao}
+                              onChange={(e) => updatePainelItem(currentArea.id, item.id, 'recomendacao', e.target.value)}
+                              placeholder="Adicione recomendações..."
+                              className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                              rows={2}
+                            />
+                          </td>
 
-                        {/* GSD */}
-                        <td className="px-4 py-4 text-center">
-                          <select
-                            value={item.gsd}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.gsd)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                          >
-                            <option value="">-</option>
-                            <option value="C">C</option>
-                            <option value="NC">NC</option>
-                            <option value="NA">NA</option>
-                          </select>
-                        </td>
+                          {/* Mídia */}
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-2 min-w-[120px]">
+                              {/* Botões de mídia em linha horizontal */}
+                              <div className="flex gap-1">
+                                {/* Upload Imagem */}
+                                <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
+                                  <Upload className="w-3 h-3" />
+                                  Img
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'image', true)}
+                                    className="hidden"
+                                  />
+                                </label>
 
-                        {/* NPER */}
-                        <td className="px-4 py-4 text-center">
-                          <select
-                            value={item.nper}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.nper)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                          >
-                            <option value="">-</option>
-                            <option value="C">C</option>
-                            <option value="NC">NC</option>
-                            <option value="NA">NA</option>
-                          </select>
-                        </td>
+                                {/* Upload Vídeo */}
+                                <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
+                                  <Video className="w-3 h-3" />
+                                  Vid
+                                  <input
+                                    type="file"
+                                    accept="video/*"
+                                    multiple
+                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'video', true)}
+                                    className="hidden"
+                                  />
+                                </label>
 
-                        {/* Recomendações */}
-                        <td className="px-4 py-4">
-                          <textarea
-                            value={item.recomendacoes}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'recomendacoes', e.target.value)}
-                            placeholder="Adicione recomendações técnicas..."
-                            className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            rows={2}
-                          />
-                        </td>
+                                {/* Upload Áudio */}
+                                <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
+                                  <Mic className="w-3 h-3" />
+                                  Aud
+                                  <input
+                                    type="file"
+                                    accept="audio/*"
+                                    multiple
+                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'audio', true)}
+                                    className="hidden"
+                                  />
+                                </label>
+                              </div>
 
-                        {/* Imagem Padrão */}
-                        <td className="px-4 py-4 text-center">
-                          <div className="flex flex-col items-center gap-2">
-                            {item.precisaImagem && item.imagemPadrao ? (
-                              <>
-                                <img
-                                  src={item.imagemPadrao}
-                                  alt={`Referência para item ${item.id}`}
-                                  className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
-                                  onClick={() => window.open(item.imagemPadrao, '_blank')}
-                                  title="Clique para ver em tamanho maior"
-                                />
-                                <div className="flex items-center gap-1 text-xs text-blue-600">
-                                  <Image className="w-3 h-3" />
-                                  <span>Ref.</span>
+                              {/* Lista de mídias */}
+                              {item.medias.length > 0 && (
+                                <div className="grid grid-cols-2 gap-1 mt-2">
+                                  {item.medias.map((media) => (
+                                    <div key={media.id} className="relative group">
+                                      {media.type === 'image' && (
+                                        <img
+                                          src={media.url}
+                                          alt={media.name}
+                                          className="w-full h-16 object-cover rounded border cursor-pointer"
+                                          onClick={() => setSelectedMedia(media)}
+                                        />
+                                      )}
+                                      {media.type === 'video' && (
+                                        <div
+                                          className="w-full h-16 bg-purple-100 rounded border flex items-center justify-center cursor-pointer"
+                                          onClick={() => setSelectedMedia(media)}
+                                        >
+                                          <Video className="w-6 h-6 text-purple-600" />
+                                        </div>
+                                      )}
+                                      {media.type === 'audio' && (
+                                        <div
+                                          className="w-full h-16 bg-orange-100 rounded border flex items-center justify-center cursor-pointer"
+                                          onClick={() => setSelectedMedia(media)}
+                                        >
+                                          <Mic className="w-6 h-6 text-orange-600" />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => removeMedia(currentArea.id, item.id, media.id, true)}
+                                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ))}
                                 </div>
-                              </>
-                            ) : (
-                              <div className="w-16 h-12 bg-gray-100 rounded border flex items-center justify-center">
-                                <Image className="w-4 h-4 text-gray-400" />
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Mídia */}
-                        <td className="px-4 py-4">
-                          <div className="flex flex-col gap-2 min-w-[120px]">
-                            {/* Botões de mídia em linha horizontal */}
-                            <div className="flex gap-1">
-                              {/* Upload Imagem */}
-                              <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
-                                <Upload className="w-3 h-3" />
-                                Img
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'image')}
-                                  className="hidden"
-                                />
-                              </label>
-
-                              {/* Upload Vídeo */}
-                              <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
-                                <Video className="w-3 h-3" />
-                                Vid
-                                <input
-                                  type="file"
-                                  accept="video/*"
-                                  multiple
-                                  onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'video')}
-                                  className="hidden"
-                                />
-                              </label>
-
-                              {/* Upload Áudio */}
-                              <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
-                                <Mic className="w-3 h-3" />
-                                Aud
-                                <input
-                                  type="file"
-                                  accept="audio/*"
-                                  multiple
-                                  onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'audio')}
-                                  className="hidden"
-                                />
-                              </label>
+                              )}
                             </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      // Renderização para subestações (75 itens NR-10)
+                      currentArea.items.map((item, index) => (
+                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {item.id}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-900 font-medium">
+                            {item.norma}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
+                            {item.descricao}
+                          </td>
+                          
+                          {/* Condição */}
+                          <td className="px-4 py-4 text-center">
+                            <select
+                              value={item.condicao}
+                              onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            >
+                              <option value="">-</option>
+                              <option value="C">C</option>
+                              <option value="NC">NC</option>
+                              <option value="NA">NA</option>
+                            </select>
+                          </td>
 
-                            {/* Lista de mídias */}
-                            {item.medias.length > 0 && (
-                              <div className="grid grid-cols-2 gap-1 mt-2">
-                                {item.medias.map((media) => (
-                                  <div key={media.id} className="relative group">
-                                    {media.type === 'image' && (
-                                      <img
-                                        src={media.url}
-                                        alt={media.name}
-                                        className="w-full h-16 object-cover rounded border cursor-pointer"
-                                        onClick={() => setSelectedMedia(media)}
-                                      />
-                                    )}
-                                    {media.type === 'video' && (
-                                      <div
-                                        className="w-full h-16 bg-purple-100 rounded border flex items-center justify-center cursor-pointer"
-                                        onClick={() => setSelectedMedia(media)}
-                                      >
-                                        <Video className="w-6 h-6 text-purple-600" />
-                                      </div>
-                                    )}
-                                    {media.type === 'audio' && (
-                                      <div
-                                        className="w-full h-16 bg-orange-100 rounded border flex items-center justify-center cursor-pointer"
-                                        onClick={() => setSelectedMedia(media)}
-                                      >
-                                        <Mic className="w-6 h-6 text-orange-600" />
-                                      </div>
-                                    )}
-                                    <button
-                                      onClick={() => removeMedia(currentArea.id, item.id, media.id)}
-                                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
+                          {/* PO */}
+                          <td className="px-4 py-4 text-center">
+                            <select
+                              value={item.po}
+                              onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.po)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            >
+                              <option value="">-</option>
+                              <option value="C">C</option>
+                              <option value="NC">NC</option>
+                              <option value="NA">NA</option>
+                            </select>
+                          </td>
+
+                          {/* FE */}
+                          <td className="px-4 py-4 text-center">
+                            <select
+                              value={item.fe}
+                              onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.fe)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            >
+                              <option value="">-</option>
+                              <option value="C">C</option>
+                              <option value="NC">NC</option>
+                              <option value="NA">NA</option>
+                            </select>
+                          </td>
+
+                          {/* GSD */}
+                          <td className="px-4 py-4 text-center">
+                            <select
+                              value={item.gsd}
+                              onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.gsd)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            >
+                              <option value="">-</option>
+                              <option value="C">C</option>
+                              <option value="NC">NC</option>
+                              <option value="NA">NA</option>
+                            </select>
+                          </td>
+
+                          {/* NPER */}
+                          <td className="px-4 py-4 text-center">
+                            <select
+                              value={item.nper}
+                              onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.nper)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            >
+                              <option value="">-</option>
+                              <option value="C">C</option>
+                              <option value="NC">NC</option>
+                              <option value="NA">NA</option>
+                            </select>
+                          </td>
+
+                          {/* Recomendações */}
+                          <td className="px-4 py-4">
+                            <textarea
+                              value={item.recomendacoes}
+                              onChange={(e) => updateItem(currentArea.id, item.id, 'recomendacoes', e.target.value)}
+                              placeholder="Adicione recomendações técnicas..."
+                              className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                              rows={2}
+                            />
+                          </td>
+
+                          {/* Imagem Padrão */}
+                          <td className="px-4 py-4 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              {item.precisaImagem && item.imagemPadrao ? (
+                                <>
+                                  <img
+                                    src={item.imagemPadrao}
+                                    alt={`Referência para item ${item.id}`}
+                                    className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
+                                    onClick={() => window.open(item.imagemPadrao, '_blank')}
+                                    title="Clique para ver em tamanho maior"
+                                  />
+                                  <div className="flex items-center gap-1 text-xs text-blue-600">
+                                    <Image className="w-3 h-3" />
+                                    <span>Ref.</span>
                                   </div>
-                                ))}
+                                </>
+                              ) : (
+                                <div className="w-16 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                                  <Image className="w-4 h-4 text-gray-400" />
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Mídia */}
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-2 min-w-[120px]">
+                              {/* Botões de mídia em linha horizontal */}
+                              <div className="flex gap-1">
+                                {/* Upload Imagem */}
+                                <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
+                                  <Upload className="w-3 h-3" />
+                                  Img
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'image')}
+                                    className="hidden"
+                                  />
+                                </label>
+
+                                {/* Upload Vídeo */}
+                                <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
+                                  <Video className="w-3 h-3" />
+                                  Vid
+                                  <input
+                                    type="file"
+                                    accept="video/*"
+                                    multiple
+                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'video')}
+                                    className="hidden"
+                                  />
+                                </label>
+
+                                {/* Upload Áudio */}
+                                <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
+                                  <Mic className="w-3 h-3" />
+                                  Aud
+                                  <input
+                                    type="file"
+                                    accept="audio/*"
+                                    multiple
+                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'audio')}
+                                    className="hidden"
+                                  />
+                                </label>
                               </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+
+                              {/* Lista de mídias */}
+                              {item.medias.length > 0 && (
+                                <div className="grid grid-cols-2 gap-1 mt-2">
+                                  {item.medias.map((media) => (
+                                    <div key={media.id} className="relative group">
+                                      {media.type === 'image' && (
+                                        <img
+                                          src={media.url}
+                                          alt={media.name}
+                                          className="w-full h-16 object-cover rounded border cursor-pointer"
+                                          onClick={() => setSelectedMedia(media)}
+                                        />
+                                      )}
+                                      {media.type === 'video' && (
+                                        <div
+                                          className="w-full h-16 bg-purple-100 rounded border flex items-center justify-center cursor-pointer"
+                                          onClick={() => setSelectedMedia(media)}
+                                        >
+                                          <Video className="w-6 h-6 text-purple-600" />
+                                        </div>
+                                      )}
+                                      {media.type === 'audio' && (
+                                        <div
+                                          className="w-full h-16 bg-orange-100 rounded border flex items-center justify-center cursor-pointer"
+                                          onClick={() => setSelectedMedia(media)}
+                                        >
+                                          <Mic className="w-6 h-6 text-orange-600" />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => removeMedia(currentArea.id, item.id, media.id)}
+                                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
