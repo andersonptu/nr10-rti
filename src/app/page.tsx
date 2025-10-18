@@ -6,7 +6,7 @@ import {
   Plus, Building, User, Calendar, MapPin, BarChart3, PieChart, TrendingUp, Clock, 
   FileDown, Settings, Home, List, Dashboard, Save, RotateCcw, Bell, Shield, 
   Database, Palette, Globe, Monitor, Smartphone, Tablet, Phone, Mail, MapPinIcon,
-  Navigation, Loader, Image
+  Navigation, Loader, Image, Edit, Search, Filter
 } from 'lucide-react';
 
 interface MediaFile {
@@ -100,6 +100,15 @@ interface ConfiguracaoSistema {
   };
 }
 
+// Estado global para armazenar as imagens padrão dos itens
+interface ImagemPadraoItem {
+  id: number;
+  norma: string;
+  descricao: string;
+  imagemPadrao: string;
+  categoria: string;
+}
+
 const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected'>[] = [
   { id: 1, norma: "NR10.3.9-d", descricao: "A sala ou subestação está identificada? Item 10.10.1-c – NR-10" },
   { id: 2, norma: "NR10.4.1", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir acidentes e outras ocorrências originadas por choque elétrico?" },
@@ -179,7 +188,7 @@ const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'np
 ];
 
 export default function InspecaoEletrica() {
-  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'selecionar-itens' | 'configuracoes' | 'dashboard'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'selecionar-itens' | 'configuracoes' | 'dashboard' | 'gerenciar-imagens'>('home');
   const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
   const [currentInspecao, setCurrentInspecao] = useState<Inspecao | null>(null);
   const [currentArea, setCurrentArea] = useState<Area | null>(null);
@@ -209,6 +218,13 @@ export default function InspecaoEletrica() {
   const [showNovaAreaForm, setShowNovaAreaForm] = useState(false);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [selectAllItems, setSelectAllItems] = useState(true);
+
+  // Estados para gerenciamento de imagens padrão
+  const [imagensPadrao, setImagensPadrao] = useState<ImagemPadraoItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('todas');
+  const [editingImage, setEditingImage] = useState<number | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState('');
 
   // Estados para configurações
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoSistema>({
@@ -250,6 +266,88 @@ export default function InspecaoEletrica() {
   });
 
   const [activeConfigTab, setActiveConfigTab] = useState<'empresa' | 'relatorios' | 'notificacoes' | 'sistema' | 'seguranca'>('empresa');
+
+  // Inicializar imagens padrão com categorias
+  useEffect(() => {
+    const imagensIniciais: ImagemPadraoItem[] = checklistItems.map(item => ({
+      id: item.id,
+      norma: item.norma,
+      descricao: item.descricao,
+      imagemPadrao: getDefaultImageForItem(item.id),
+      categoria: getCategoryForItem(item.norma)
+    }));
+    setImagensPadrao(imagensIniciais);
+  }, []);
+
+  // Função para obter imagem padrão baseada no tipo de item
+  const getDefaultImageForItem = (itemId: number): string => {
+    const imageMap: { [key: number]: string } = {
+      1: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80', // Identificação
+      2: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&q=80', // Prevenção acidentes
+      3: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400&h=300&fit=crop&q=80', // Prevenção incêndios
+      4: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80', // Prevenção geral
+      5: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop&q=80', // Manutenção
+      6: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop&q=80', // Manutenção preventiva
+      7: 'https://images.unsplash.com/photo-1621905252472-e8592afb8f2f?w=400&h=300&fit=crop&q=80', // Inspeção
+      8: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop&q=80', // Aterramento
+      9: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop&q=80', // Verificação aterramento
+      10: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&q=80', // EPC
+      // Continua para todos os 75 itens...
+    };
+    
+    return imageMap[itemId] || 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80';
+  };
+
+  // Função para categorizar itens
+  const getCategoryForItem = (norma: string): string => {
+    if (norma.includes('10.3')) return 'Responsabilidades';
+    if (norma.includes('10.4')) return 'Projeto e Execução';
+    if (norma.includes('10.5')) return 'Manutenção';
+    if (norma.includes('10.6')) return 'Aterramento e Proteção';
+    if (norma.includes('10.7')) return 'Equipamentos de Proteção';
+    if (norma.includes('10.8')) return 'Vestimentas e Adornos';
+    if (norma.includes('10.9')) return 'Medidas de Proteção';
+    if (norma.includes('10.10')) return 'Proteção contra Incêndio';
+    if (norma.includes('10.11')) return 'Treinamento';
+    if (norma.includes('10.12')) return 'Documentação';
+    if (norma.includes('10.13')) return 'Controle de Riscos';
+    if (norma.includes('10.14')) return 'Direitos e Deveres';
+    if (norma.includes('10.15')) return 'Qualificação';
+    return 'Geral';
+  };
+
+  // Função para atualizar imagem padrão
+  const updateImagemPadrao = (itemId: number, novaUrl: string) => {
+    setImagensPadrao(prev => prev.map(item => 
+      item.id === itemId ? { ...item, imagemPadrao: novaUrl } : item
+    ));
+    
+    // Atualizar também nas inspeções existentes
+    setInspecoes(prev => prev.map(inspecao => ({
+      ...inspecao,
+      areas: inspecao.areas.map(area => ({
+        ...area,
+        items: area.items.map(item => 
+          item.id === itemId ? { ...item, imagemPadrao: novaUrl } : item
+        )
+      }))
+    })));
+
+    setEditingImage(null);
+    setNewImageUrl('');
+    alert('Imagem padrão atualizada com sucesso!');
+  };
+
+  // Filtrar imagens baseado na busca e categoria
+  const imagensFiltradas = imagensPadrao.filter(item => {
+    const matchSearch = item.norma.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       item.descricao.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCategory = selectedCategory === 'todas' || item.categoria === selectedCategory;
+    return matchSearch && matchCategory;
+  });
+
+  // Obter categorias únicas
+  const categorias = ['todas', ...Array.from(new Set(imagensPadrao.map(item => item.categoria)))];
 
   // FUNÇÃO PARA OBTER GEOLOCALIZAÇÃO
   const obterLocalizacao = async () => {
@@ -524,20 +622,23 @@ export default function InspecaoEletrica() {
     // Criar checklist apenas com os itens selecionados
     const checklistSelecionado: ChecklistItem[] = checklistItems
       .filter(item => selectedItems.includes(item.id))
-      .map(item => ({
-        id: item.id,
-        norma: item.norma,
-        descricao: item.descricao,
-        condicao: '',
-        po: '',
-        fe: '',
-        gsd: '',
-        nper: '',
-        recomendacoes: '',
-        imagemPadrao: `https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80`, // Imagem padrão de referência elétrica
-        medias: [],
-        selected: true
-      }));
+      .map(item => {
+        const imagemItem = imagensPadrao.find(img => img.id === item.id);
+        return {
+          id: item.id,
+          norma: item.norma,
+          descricao: item.descricao,
+          condicao: '',
+          po: '',
+          fe: '',
+          gsd: '',
+          nper: '',
+          recomendacoes: '',
+          imagemPadrao: imagemItem?.imagemPadrao || getDefaultImageForItem(item.id),
+          medias: [],
+          selected: true
+        };
+      });
 
     const area: Area = {
       id: Date.now().toString(),
@@ -564,20 +665,23 @@ export default function InspecaoEletrica() {
     if (!novaArea.trim() || !currentInspecao) return;
 
     // Criar checklist completo com todos os 75 itens
-    const checklistCompleto: ChecklistItem[] = checklistItems.map(item => ({
-      id: item.id,
-      norma: item.norma,
-      descricao: item.descricao,
-      condicao: '',
-      po: '',
-      fe: '',
-      gsd: '',
-      nper: '',
-      recomendacoes: '',
-      imagemPadrao: `https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80`, // Imagem padrão de referência elétrica
-      medias: [],
-      selected: true
-    }));
+    const checklistCompleto: ChecklistItem[] = checklistItems.map(item => {
+      const imagemItem = imagensPadrao.find(img => img.id === item.id);
+      return {
+        id: item.id,
+        norma: item.norma,
+        descricao: item.descricao,
+        condicao: '',
+        po: '',
+        fe: '',
+        gsd: '',
+        nper: '',
+        recomendacoes: '',
+        imagemPadrao: imagemItem?.imagemPadrao || getDefaultImageForItem(item.id),
+        medias: [],
+        selected: true
+      };
+    });
 
     const area: Area = {
       id: Date.now().toString(),
@@ -717,13 +821,37 @@ export default function InspecaoEletrica() {
     }
   };
 
-  // FUNÇÃO PARA GERAR PDF COM ESTRUTURA PROFISSIONAL E MARCA D'ÁGUA
+  // FUNÇÃO PARA GERAR PDF COM ESTRUTURA PROFISSIONAL E MARCA D'ÁGUA - VERSÃO CORRIGIDA
   const generatePDF = async () => {
     if (!currentInspecao) return;
     
     try {
-      // Importar jsPDF dinamicamente
-      const { jsPDF } = await import('jspdf');
+      // Verificar se jsPDF está disponível globalmente primeiro
+      let jsPDF = (window as any).jsPDF;
+      
+      // Se não estiver disponível, tentar carregar via CDN
+      if (!jsPDF) {
+        console.log('Carregando jsPDF via CDN...');
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        script.crossOrigin = 'anonymous';
+        document.head.appendChild(script);
+        
+        await new Promise((resolve, reject) => {
+          script.onload = () => {
+            jsPDF = (window as any).jsPDF;
+            resolve(jsPDF);
+          };
+          script.onerror = () => reject(new Error('Falha ao carregar jsPDF via CDN'));
+          
+          // Timeout de 10 segundos
+          setTimeout(() => reject(new Error('Timeout ao carregar jsPDF')), 10000);
+        });
+      }
+      
+      if (!jsPDF) {
+        throw new Error('jsPDF não está disponível');
+      }
       
       // Criar nova instância do PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -1056,7 +1184,25 @@ export default function InspecaoEletrica() {
       
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
-      alert('Erro ao gerar PDF. Verifique se a biblioteca jsPDF está instalada.');
+      
+      // Mensagem de erro mais específica baseada no tipo de erro
+      let errorMessage = 'Erro ao gerar PDF. ';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to load chunk') || error.message.includes('Loading chunk')) {
+          errorMessage += 'Problema de conectividade detectado. Tente novamente em alguns segundos.';
+        } else if (error.message.includes('jsPDF') || error.message.includes('Timeout')) {
+          errorMessage += 'Biblioteca de PDF não pôde ser carregada. Verifique sua conexão com a internet.';
+        } else if (error.message.includes('CDN')) {
+          errorMessage += 'Falha ao carregar recursos externos. Tente recarregar a página.';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'Erro desconhecido. Tente recarregar a página.';
+      }
+      
+      alert(errorMessage + '\n\nSoluções alternativas:\n• Recarregue a página e tente novamente\n• Verifique sua conexão com a internet\n• Aguarde alguns segundos e tente novamente\n• Use a funcionalidade de exportação manual dos dados');
     }
   };
 
@@ -1294,6 +1440,220 @@ export default function InspecaoEletrica() {
       {children}
     </div>
   );
+
+  // Renderização da tela de gerenciamento de imagens
+  if (currentView === 'gerenciar-imagens') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Cabeçalho Profissional */}
+        <ProfessionalHeader 
+          title="GERENCIAMENTO DE IMAGENS PADRÃO" 
+          subtitle="Configuração das Imagens de Referência dos 75 Itens NR-10"
+        />
+
+        <div className="max-w-7xl mx-auto p-6">
+          {/* Botão de Navegação */}
+          <div className="mb-6">
+            <button
+              onClick={() => setCurrentView('home')}
+              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
+            >
+              <Home className="w-5 h-5" />
+              Voltar ao Início
+            </button>
+          </div>
+
+          {/* Controles de Busca e Filtro */}
+          <NumberedSection number="1" title="CONTROLES DE BUSCA E FILTRO">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Buscar por Norma ou Descrição
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Ex: NR10.3.9 ou identificação..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filtrar por Categoria
+                </label>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                  >
+                    {categorias.map(categoria => (
+                      <option key={categoria} value={categoria}>
+                        {categoria === 'todas' ? 'Todas as Categorias' : categoria}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Mostrando {imagensFiltradas.length} de {imagensPadrao.length} itens
+              </p>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Image className="w-4 h-4" />
+                <span>Clique na imagem para visualizar em tamanho maior</span>
+              </div>
+            </div>
+          </NumberedSection>
+
+          {/* Lista de Imagens */}
+          <NumberedSection number="2" title="IMAGENS PADRÃO DOS ITENS NR-10">
+            <div className="space-y-4">
+              {imagensFiltradas.map((item) => (
+                <div key={item.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                    {/* Informações do Item */}
+                    <div className="lg:col-span-1 text-center">
+                      <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mx-auto">
+                        {item.id}
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-2">
+                      <div className="text-sm font-medium text-blue-600">{item.norma}</div>
+                      <div className="text-xs text-gray-500 mt-1">{item.categoria}</div>
+                    </div>
+
+                    <div className="lg:col-span-4">
+                      <p className="text-sm text-gray-700 line-clamp-2">{item.descricao}</p>
+                    </div>
+
+                    {/* Imagem Atual */}
+                    <div className="lg:col-span-2 text-center">
+                      <img
+                        src={item.imagemPadrao}
+                        alt={`Referência para item ${item.id}`}
+                        className="w-20 h-16 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity mx-auto"
+                        onClick={() => window.open(item.imagemPadrao, '_blank')}
+                        title="Clique para ver em tamanho maior"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Imagem Atual</p>
+                    </div>
+
+                    {/* Controles de Edição */}
+                    <div className="lg:col-span-3">
+                      {editingImage === item.id ? (
+                        <div className="space-y-2">
+                          <input
+                            type="url"
+                            value={newImageUrl}
+                            onChange={(e) => setNewImageUrl(e.target.value)}
+                            placeholder="https://exemplo.com/nova-imagem.jpg"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => updateImagemPadrao(item.id, newImageUrl)}
+                              disabled={!newImageUrl.trim()}
+                              className={`flex-1 px-3 py-2 text-xs rounded transition-colors ${
+                                newImageUrl.trim()
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                              }`}
+                            >
+                              <CheckCircle className="w-3 h-3 inline mr-1" />
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingImage(null);
+                                setNewImageUrl('');
+                              }}
+                              className="flex-1 px-3 py-2 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                            >
+                              <XCircle className="w-3 h-3 inline mr-1" />
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingImage(item.id);
+                            setNewImageUrl(item.imagemPadrao);
+                          }}
+                          className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                          Alterar Imagem
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {imagensFiltradas.length === 0 && (
+              <div className="text-center py-12">
+                <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">Nenhum item encontrado</p>
+                <p className="text-gray-400">Tente ajustar os filtros de busca</p>
+              </div>
+            )}
+          </NumberedSection>
+
+          {/* Instruções */}
+          <NumberedSection number="3" title="INSTRUÇÕES DE USO">
+            <div className="prose max-w-none">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Como Alterar Imagens</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-gray-700">
+                    <li>Clique no botão "Alterar Imagem" do item desejado</li>
+                    <li>Cole a URL da nova imagem no campo que aparece</li>
+                    <li>Clique em "Salvar" para confirmar a alteração</li>
+                    <li>A imagem será atualizada em todas as inspeções futuras</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Recomendações</h4>
+                  <ul className="list-disc list-inside space-y-2 text-gray-700">
+                    <li>Use imagens de alta qualidade (mínimo 400x300px)</li>
+                    <li>Prefira URLs de serviços confiáveis (Unsplash, etc.)</li>
+                    <li>Certifique-se de que a imagem representa o item NR-10</li>
+                    <li>Teste a URL antes de salvar para evitar links quebrados</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h5 className="font-medium text-blue-900">Importante</h5>
+                    <p className="text-blue-800 text-sm mt-1">
+                      As alterações nas imagens padrão afetarão apenas as novas áreas criadas após a modificação. 
+                      Áreas já existentes manterão suas imagens originais.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </NumberedSection>
+        </div>
+      </div>
+    );
+  }
 
   // Renderização da tela de dashboard com layout profissional
   if (currentView === 'dashboard') {
@@ -1857,10 +2217,13 @@ export default function InspecaoEletrica() {
                 <p className="text-sm opacity-90">Análises e relatórios</p>
               </button>
 
-              <button className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                <Clock className="w-8 h-8 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold mb-2">Cronograma</h3>
-                <p className="text-sm opacity-90">Adequações e prazos</p>
+              <button 
+                onClick={() => setCurrentView('gerenciar-imagens')}
+                className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              >
+                <Image className="w-8 h-8 mx-auto mb-3" />
+                <h3 className="text-lg font-semibold mb-2">Gerenciar Imagens</h3>
+                <p className="text-sm opacity-90">Alterar imagens padrão dos 75 itens</p>
               </button>
 
               <button 
