@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Camera, Upload, Video, Mic, Eye, Trash2, Download, FileText, CheckCircle, XCircle, AlertCircle,
   Plus, Building, User, Calendar, MapPin, BarChart3, PieChart, TrendingUp, Clock, 
   FileDown, Settings, Home, List, Dashboard, Save, RotateCcw, Bell, Shield, 
-  Database, Palette, Globe, Monitor, Smartphone, Tablet, Phone, Mail, MapPinIcon
+  Database, Palette, Globe, Monitor, Smartphone, Tablet, Phone, Mail, MapPinIcon,
+  Navigation, Loader, Image
 } from 'lucide-react';
 
 interface MediaFile {
@@ -26,7 +27,8 @@ interface ChecklistItem {
   fe: 'C' | 'NC' | 'NA' | '';
   gsd: 'C' | 'NC' | 'NA' | '';
   nper: 'C' | 'NC' | 'NA' | '';
-  comentario: string;
+  recomendacoes: string;
+  imagemPadrao: string;
   medias: MediaFile[];
   selected: boolean;
 }
@@ -37,18 +39,27 @@ interface Area {
   items: ChecklistItem[];
 }
 
+interface Localizacao {
+  latitude: number;
+  longitude: number;
+  endereco?: string;
+  timestamp: string;
+  precisao?: number;
+}
+
 interface Inspecao {
   id: string;
-  nomeCliente: string;
+  nome: string;
   numeroContrato: string;
   engenheiroResponsavel: string;
   responsavelCliente: string;
-  dataInspecao: string;
-  observacao: string;
   numeroSequencial: string;
+  data: string;
   areas: Area[];
   status: 'Em Andamento' | 'Concluída' | 'Pendente';
   createdAt: string;
+  localizacao?: Localizacao;
+  logoCliente?: string; // Nova propriedade para logo do cliente
 }
 
 interface ConfiguracaoSistema {
@@ -59,6 +70,7 @@ interface ConfiguracaoSistema {
     telefone: string;
     email: string;
     logo: string;
+    marcaDagua: string; // Nova propriedade para marca d'água
   };
   relatorios: {
     incluirFotos: boolean;
@@ -88,7 +100,7 @@ interface ConfiguracaoSistema {
   };
 }
 
-const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'comentario' | 'medias' | 'selected'>[] = [
+const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected'>[] = [
   { id: 1, norma: "NR10.3.9-d", descricao: "A sala ou subestação está identificada? Item 10.10.1-c – NR-10" },
   { id: 2, norma: "NR10.4.1", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir acidentes e outras ocorrências originadas por choque elétrico?" },
   { id: 3, norma: "NR10.4.2", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir incêndios e explosões?" },
@@ -177,14 +189,19 @@ export default function InspecaoEletrica() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Estados para nova inspeção - CAMPOS ATUALIZADOS
+  // Estados para geolocalização
+  const [localizacao, setLocalizacao] = useState<Localizacao | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Estados para nova inspeção
   const [novaInspecao, setNovaInspecao] = useState({
-    nomeCliente: '',
+    nome: '',
     numeroContrato: '',
     engenheiroResponsavel: '',
     responsavelCliente: '',
-    dataInspecao: new Date().toISOString().split('T')[0],
-    observacao: ''
+    data: new Date().toISOString().split('T')[0],
+    logoCliente: '' // Novo campo para logo do cliente
   });
 
   // Estados para nova área
@@ -201,7 +218,8 @@ export default function InspecaoEletrica() {
       endereco: 'Rua Bálsamo, 107 - Jardim Serrano - Paracatu/MG',
       telefone: '(38) 998368153',
       email: 'pabrasil@pabrasil.net',
-      logo: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg'
+      logo: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg',
+      marcaDagua: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg' // Marca d'água PA Brasil
     },
     relatorios: {
       incluirFotos: true,
@@ -233,6 +251,180 @@ export default function InspecaoEletrica() {
 
   const [activeConfigTab, setActiveConfigTab] = useState<'empresa' | 'relatorios' | 'notificacoes' | 'sistema' | 'seguranca'>('empresa');
 
+  // FUNÇÃO PARA OBTER GEOLOCALIZAÇÃO
+  const obterLocalizacao = async () => {
+    setLoadingLocation(true);
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolocalização não é suportada neste navegador');
+      setLoadingLocation(false);
+      return;
+    }
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          reject,
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 60000
+          }
+        );
+      });
+
+      const novaLocalizacao: Localizacao = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        precisao: position.coords.accuracy,
+        timestamp: new Date().toISOString()
+      };
+
+      // Tentar obter endereço usando reverse geocoding
+      try {
+        const response = await fetch(
+          `https://api.opencagedata.com/geocode/v1/json?q=${position.coords.latitude}+${position.coords.longitude}&key=YOUR_API_KEY&language=pt&pretty=1`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.results && data.results.length > 0) {
+            novaLocalizacao.endereco = data.results[0].formatted;
+          }
+        }
+      } catch (geocodeError) {
+        // Se falhar o geocoding, continua sem o endereço
+        console.log('Não foi possível obter o endereço, mas a localização foi capturada');
+      }
+
+      setLocalizacao(novaLocalizacao);
+      
+      // Se estiver criando uma inspeção, adicionar a localização
+      if (currentInspecao) {
+        const updatedInspecao = {
+          ...currentInspecao,
+          localizacao: novaLocalizacao
+        };
+        setCurrentInspecao(updatedInspecao);
+        setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+      }
+
+    } catch (error: any) {
+      let errorMessage = 'Erro ao obter localização';
+      
+      if (error.code === 1) {
+        errorMessage = 'Permissão de localização negada. Permita o acesso à localização nas configurações do navegador.';
+      } else if (error.code === 2) {
+        errorMessage = 'Localização indisponível. Verifique se o GPS está ativado.';
+      } else if (error.code === 3) {
+        errorMessage = 'Tempo limite excedido ao obter localização.';
+      }
+      
+      setLocationError(errorMessage);
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
+  // COMPONENTE DE GEOLOCALIZAÇÃO
+  const GeolocationComponent = () => (
+    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Navigation className="w-6 h-6 text-blue-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Localização do Cliente</h3>
+        </div>
+        <button
+          onClick={obterLocalizacao}
+          disabled={loadingLocation}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            loadingLocation 
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {loadingLocation ? (
+            <>
+              <Loader className="w-4 h-4 animate-spin" />
+              Obtendo...
+            </>
+          ) : (
+            <>
+              <MapPin className="w-4 h-4" />
+              Capturar Localização
+            </>
+          )}
+        </button>
+      </div>
+
+      {locationError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <p className="text-red-800 text-sm">{locationError}</p>
+          </div>
+        </div>
+      )}
+
+      {localizacao && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h4 className="font-medium text-green-800 mb-2">Coordenadas GPS</h4>
+              <div className="text-sm text-green-700 space-y-1">
+                <p><span className="font-medium">Latitude:</span> {localizacao.latitude.toFixed(6)}</p>
+                <p><span className="font-medium">Longitude:</span> {localizacao.longitude.toFixed(6)}</p>
+                {localizacao.precisao && (
+                  <p><span className="font-medium">Precisão:</span> ±{Math.round(localizacao.precisao)}m</p>
+                )}
+                <p><span className="font-medium">Capturado em:</span> {new Date(localizacao.timestamp).toLocaleString('pt-BR')}</p>
+              </div>
+            </div>
+            
+            {localizacao.endereco && (
+              <div>
+                <h4 className="font-medium text-green-800 mb-2">Endereço</h4>
+                <p className="text-sm text-green-700">{localizacao.endereco}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <a
+              href={`https://www.google.com/maps?q=${localizacao.latitude},${localizacao.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+            >
+              <Globe className="w-4 h-4" />
+              Ver no Google Maps
+            </a>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${localizacao.latitude}, ${localizacao.longitude}`);
+                alert('Coordenadas copiadas para a área de transferência!');
+              }}
+              className="flex items-center gap-2 bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-700 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Copiar Coordenadas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!localizacao && !locationError && !loadingLocation && (
+        <div className="text-center py-8">
+          <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p className="text-gray-500">Clique em "Capturar Localização" para registrar a posição atual</p>
+          <p className="text-gray-400 text-sm mt-1">A localização será anexada à inspeção para referência</p>
+        </div>
+      )}
+    </div>
+  );
+
   // FUNÇÃO PARA GERAR NÚMERO SEQUENCIAL
   const generateSequentialNumber = (responsavelCliente: string): string => {
     const currentYear = new Date().getFullYear();
@@ -250,7 +442,7 @@ export default function InspecaoEletrica() {
   };
 
   const createNewInspecao = () => {
-    if (!novaInspecao.nomeCliente || !novaInspecao.numeroContrato || !novaInspecao.engenheiroResponsavel || !novaInspecao.responsavelCliente) {
+    if (!novaInspecao.nome || !novaInspecao.numeroContrato || !novaInspecao.engenheiroResponsavel || !novaInspecao.responsavelCliente) {
       alert('Preencha todos os campos obrigatórios');
       return;
     }
@@ -260,16 +452,17 @@ export default function InspecaoEletrica() {
 
     const inspecao: Inspecao = {
       id: Date.now().toString(),
-      nomeCliente: novaInspecao.nomeCliente,
+      nome: novaInspecao.nome,
       numeroContrato: novaInspecao.numeroContrato,
       engenheiroResponsavel: novaInspecao.engenheiroResponsavel,
       responsavelCliente: novaInspecao.responsavelCliente,
-      dataInspecao: novaInspecao.dataInspecao,
-      observacao: novaInspecao.observacao,
       numeroSequencial: numeroSequencial,
+      data: novaInspecao.data,
       areas: [],
       status: 'Em Andamento',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      localizacao: localizacao || undefined,
+      logoCliente: novaInspecao.logoCliente || undefined
     };
 
     setInspecoes(prev => [...prev, inspecao]);
@@ -278,16 +471,16 @@ export default function InspecaoEletrica() {
     
     // Reset form
     setNovaInspecao({
-      nomeCliente: '',
+      nome: '',
       numeroContrato: '',
       engenheiroResponsavel: '',
       responsavelCliente: '',
-      dataInspecao: new Date().toISOString().split('T')[0],
-      observacao: ''
+      data: new Date().toISOString().split('T')[0],
+      logoCliente: ''
     });
 
     // Mostrar mensagem com o número sequencial gerado
-    alert(`Inspeção criada com sucesso!\nNúmero sequencial: ${numeroSequencial}`);
+    alert(`Inspeção criada com sucesso!\nNúmero sequencial: ${numeroSequencial}${localizacao ? '\nLocalização capturada e anexada!' : ''}`);
   };
 
   const showItemSelection = () => {
@@ -340,7 +533,8 @@ export default function InspecaoEletrica() {
         fe: '',
         gsd: '',
         nper: '',
-        comentario: '',
+        recomendacoes: '',
+        imagemPadrao: `https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80`, // Imagem padrão de referência elétrica
         medias: [],
         selected: true
       }));
@@ -379,7 +573,8 @@ export default function InspecaoEletrica() {
       fe: '',
       gsd: '',
       nper: '',
-      comentario: '',
+      recomendacoes: '',
+      imagemPadrao: `https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80`, // Imagem padrão de referência elétrica
       medias: [],
       selected: true
     }));
@@ -522,6 +717,7 @@ export default function InspecaoEletrica() {
     }
   };
 
+  // FUNÇÃO PARA GERAR PDF COM ESTRUTURA PROFISSIONAL E MARCA D'ÁGUA
   const generatePDF = async () => {
     if (!currentInspecao) return;
     
@@ -537,95 +733,255 @@ export default function InspecaoEletrica() {
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 20;
       let yPosition = margin;
+      let pageNumber = 1;
       
-      // Função para adicionar nova página se necessário
-      const checkPageBreak = (requiredHeight: number) => {
-        if (yPosition + requiredHeight > pageHeight - margin) {
-          pdf.addPage();
-          yPosition = margin;
+      // Função para adicionar marca d'água em todas as páginas
+      const addWatermark = () => {
+        if (configuracoes.relatorios.marcaDagua && configuracoes.empresa.marcaDagua) {
+          pdf.setGState(new pdf.GState({ opacity: 0.1 }));
+          pdf.setFontSize(60);
+          pdf.setTextColor(200, 200, 200);
+          pdf.text('PA BRASIL', pageWidth / 2, pageHeight / 2, { 
+            align: 'center', 
+            angle: 45 
+          });
+          pdf.text('AUTOMAÇÃO', pageWidth / 2, (pageHeight / 2) + 20, { 
+            align: 'center', 
+            angle: 45 
+          });
+          pdf.setGState(new pdf.GState({ opacity: 1 }));
         }
       };
+
+      // Função para adicionar cabeçalho profissional
+      const addHeader = () => {
+        // Marca d'água
+        addWatermark();
+        
+        // Barra laranja lateral (baseada nas imagens)
+        pdf.setFillColor(255, 140, 0); // Laranja
+        pdf.rect(0, 0, 8, pageHeight, 'F');
+        
+        // Logo PA Brasil (canto superior esquerdo)
+        try {
+          // Placeholder para logo - em produção, usar imagem real
+          pdf.setFillColor(255, 255, 255);
+          pdf.rect(margin, margin, 30, 20, 'F');
+          pdf.setFontSize(8);
+          pdf.setTextColor(0, 0, 0);
+          pdf.text('PA BRASIL', margin + 2, margin + 8);
+          pdf.text('AUTOMAÇÃO', margin + 2, margin + 12);
+        } catch (error) {
+          console.log('Erro ao adicionar logo PA Brasil');
+        }
+
+        // Logo do Cliente (canto superior direito)
+        if (currentInspecao.logoCliente) {
+          try {
+            pdf.setFillColor(240, 240, 240);
+            pdf.rect(pageWidth - margin - 30, margin, 30, 20, 'F');
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('LOGO CLIENTE', pageWidth - margin - 28, margin + 12);
+          } catch (error) {
+            console.log('Erro ao adicionar logo do cliente');
+          }
+        }
+
+        // Informações do documento (baseado nas imagens)
+        pdf.setFillColor(240, 240, 240);
+        pdf.rect(pageWidth - margin - 60, margin + 25, 60, 25, 'F');
+        pdf.setFontSize(8);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text('RELATÓRIO TÉCNICO DE INSPEÇÃO', pageWidth - margin - 58, margin + 30);
+        pdf.text(`RRTI-${new Date().getFullYear()}-${currentInspecao.numeroSequencial}`, pageWidth - margin - 58, margin + 35);
+        pdf.text('REVISÃO: 001', pageWidth - margin - 58, margin + 40);
+        pdf.text(`FOLHA: Página ${pageNumber}`, pageWidth - margin - 58, margin + 45);
+        
+        yPosition = margin + 60;
+      };
+
+      // Função para adicionar rodapé profissional
+      const addFooter = () => {
+        const footerY = pageHeight - 20;
+        
+        // Linha separadora
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+        
+        // Informações da empresa
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(configuracoes.empresa.nome, margin, footerY);
+        pdf.text(`${configuracoes.empresa.telefone} | ${configuracoes.empresa.email}`, margin, footerY + 4);
+        pdf.text(configuracoes.empresa.endereco, margin, footerY + 8);
+        
+        // Data e página
+        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin - 40, footerY);
+        pdf.text(`Página ${pageNumber}`, pageWidth - margin - 40, footerY + 4);
+      };
+
+      // Função para adicionar nova página
+      const addNewPage = () => {
+        addFooter();
+        pdf.addPage();
+        pageNumber++;
+        yPosition = margin;
+        addHeader();
+      };
+
+      // Função para verificar quebra de página
+      const checkPageBreak = (requiredHeight: number) => {
+        if (yPosition + requiredHeight > pageHeight - 40) {
+          addNewPage();
+        }
+      };
+
+      // PÁGINA 1 - CAPA
+      addHeader();
       
-      // Cabeçalho
-      pdf.setFontSize(18);
+      // Título principal (baseado nas imagens)
+      pdf.setFontSize(24);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('RELATÓRIO DE INSPEÇÃO ELÉTRICA NR-10', pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += 10;
+      pdf.setTextColor(0, 100, 200); // Azul
+      pdf.text('RELATÓRIO TÉCNICO DE INSPEÇÃO', pageWidth / 2, yPosition + 20, { align: 'center' });
       
-      pdf.setFontSize(14);
-      pdf.text(currentInspecao.nomeCliente, pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += 8;
+      pdf.setFontSize(18);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('INSTALAÇÕES ELÉTRICAS - NR-10', pageWidth / 2, yPosition + 35, { align: 'center' });
+      
+      yPosition += 60;
+      
+      // Informações da inspeção em caixa
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(margin, yPosition, pageWidth - 2 * margin, 60, 'F');
+      pdf.setDrawColor(0, 100, 200);
+      pdf.rect(margin, yPosition, pageWidth - 2 * margin, 60);
       
       pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Número Sequencial: ${currentInspecao.numeroSequencial}`, pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += 15;
-      
-      // Dados da Inspeção
-      pdf.setFontSize(14);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('DADOS DA INSPEÇÃO', margin, yPosition);
-      yPosition += 8;
+      pdf.text('DADOS DA INSPEÇÃO', margin + 5, yPosition + 10);
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      const infoLines = [
+        `Cliente: ${currentInspecao.nome}`,
+        `Contrato: ${currentInspecao.numeroContrato}`,
+        `Engenheiro Responsável: ${currentInspecao.engenheiroResponsavel}`,
+        `Responsável do Cliente: ${currentInspecao.responsavelCliente}`,
+        `Data da Inspeção: ${new Date(currentInspecao.data).toLocaleDateString('pt-BR')}`,
+        `Número Sequencial: ${currentInspecao.numeroSequencial}`
+      ];
+      
+      infoLines.forEach((line, index) => {
+        pdf.text(line, margin + 5, yPosition + 20 + (index * 6));
+      });
+      
+      yPosition += 80;
+      
+      // SUMÁRIO (baseado nas imagens)
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0, 100, 200);
+      pdf.text('SUMÁRIO', margin, yPosition);
+      yPosition += 15;
       
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
-      const infoData = [
-        `Nome do Cliente: ${currentInspecao.nomeCliente}`,
-        `Número do Contrato: ${currentInspecao.numeroContrato}`,
-        `Engenheiro Responsável: ${currentInspecao.engenheiroResponsavel}`,
-        `Responsável do Cliente: ${currentInspecao.responsavelCliente}`,
-        `Data da Inspeção: ${new Date(currentInspecao.dataInspecao).toLocaleDateString('pt-BR')}`,
-        `Status: ${currentInspecao.status}`
+      pdf.setTextColor(0, 0, 0);
+      
+      const sumarioItems = [
+        '1. INTRODUÇÃO',
+        '2. OBJETIVO',
+        '3. NORMAS APLICÁVEIS',
+        '4. METODOLOGIA',
+        '5. CLASSIFICAÇÃO DOS RISCOS',
+        '6. RESULTADOS DA INSPEÇÃO',
+        '7. RECOMENDAÇÕES',
+        '8. CONCLUSÕES',
+        '9. ANEXOS'
       ];
       
-      // Adicionar observação se existir
-      if (currentInspecao.observacao && currentInspecao.observacao.trim()) {
-        infoData.push(`Observação: ${currentInspecao.observacao}`);
-      }
-      
-      infoData.forEach(info => {
-        pdf.text(info, margin, yPosition);
-        yPosition += 5;
+      sumarioItems.forEach((item, index) => {
+        pdf.text(item, margin + 10, yPosition + (index * 8));
+        // Linha pontilhada
+        const textWidth = pdf.getTextWidth(item);
+        const dotsStart = margin + 15 + textWidth;
+        const dotsEnd = pageWidth - margin - 20;
+        let dotPosition = dotsStart + 5;
+        
+        while (dotPosition < dotsEnd) {
+          pdf.text('.', dotPosition, yPosition + (index * 8));
+          dotPosition += 3;
+        }
+        
+        pdf.text((index + 2).toString(), pageWidth - margin - 15, yPosition + (index * 8));
       });
-      yPosition += 10;
+      
+      addFooter();
+      
+      // NOVA PÁGINA - CONTEÚDO
+      pdf.addPage();
+      pageNumber++;
+      addHeader();
+      
+      // Seção 6 - Resultados da Inspeção
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0, 100, 200);
+      pdf.text('6. RESULTADOS DA INSPEÇÃO', margin, yPosition);
+      yPosition += 15;
       
       // Áreas e Itens
       currentInspecao.areas.forEach((area, areaIndex) => {
-        checkPageBreak(20);
+        checkPageBreak(30);
         
         // Título da área
-        pdf.setFontSize(12);
+        pdf.setFontSize(14);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`ÁREA: ${area.nome}`, margin, yPosition);
-        yPosition += 8;
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`6.${areaIndex + 1} ÁREA: ${area.nome.toUpperCase()}`, margin, yPosition);
+        yPosition += 12;
+        
+        // Tabela de resultados
+        const tableStartY = yPosition;
+        const colWidths = [15, 25, 70, 15, 15, 15, 15, 15];
+        const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER'];
         
         // Cabeçalho da tabela
+        pdf.setFillColor(50, 50, 50);
+        pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+        
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'bold');
-        const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER'];
-        const colWidths = [15, 25, 80, 15, 15, 15, 15, 15];
+        pdf.setTextColor(255, 255, 255);
+        
         let xPos = margin;
-        
-        checkPageBreak(10);
-        
-        // Desenhar cabeçalho
         headers.forEach((header, i) => {
-          pdf.rect(xPos, yPosition - 3, colWidths[i], 6);
-          pdf.text(header, xPos + 2, yPosition + 1);
+          pdf.text(header, xPos + 2, yPosition + 5);
           xPos += colWidths[i];
         });
-        yPosition += 6;
+        
+        yPosition += 8;
         
         // Dados da tabela
         pdf.setFont('helvetica', 'normal');
-        area.items.forEach((item) => {
-          checkPageBreak(8);
+        pdf.setTextColor(0, 0, 0);
+        
+        area.items.forEach((item, itemIndex) => {
+          checkPageBreak(12);
+          
+          // Cor de fundo alternada
+          if (itemIndex % 2 === 0) {
+            pdf.setFillColor(248, 248, 248);
+            pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+          }
           
           xPos = margin;
           const rowData = [
             item.id.toString(),
             item.norma,
-            item.descricao.length > 40 ? item.descricao.substring(0, 37) + '...' : item.descricao,
+            item.descricao.length > 35 ? item.descricao.substring(0, 32) + '...' : item.descricao,
             item.condicao || '-',
             item.po || '-',
             item.fe || '-',
@@ -633,45 +989,70 @@ export default function InspecaoEletrica() {
             item.nper || '-'
           ];
           
-          // Desenhar células
           rowData.forEach((data, i) => {
-            pdf.rect(xPos, yPosition - 3, colWidths[i], 6);
-            pdf.text(data, xPos + 2, yPosition + 1);
+            pdf.text(data, xPos + 2, yPosition + 5);
             xPos += colWidths[i];
           });
-          yPosition += 6;
           
-          // Adicionar comentário se existir
-          if (item.comentario && item.comentario.trim()) {
-            checkPageBreak(5);
+          // Bordas da tabela
+          pdf.setDrawColor(200, 200, 200);
+          xPos = margin;
+          headers.forEach((_, i) => {
+            pdf.rect(xPos, yPosition, colWidths[i], 8);
+            xPos += colWidths[i];
+          });
+          
+          yPosition += 8;
+          
+          // Recomendações se existir
+          if (item.recomendacoes && item.recomendacoes.trim()) {
+            checkPageBreak(8);
             pdf.setFontSize(7);
             pdf.setFont('helvetica', 'italic');
-            pdf.text(`Obs: ${item.comentario}`, margin + 2, yPosition + 1);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text(`Recomendações: ${item.recomendacoes}`, margin + 2, yPosition + 4);
             pdf.setFontSize(8);
             pdf.setFont('helvetica', 'normal');
-            yPosition += 4;
+            pdf.setTextColor(0, 0, 0);
+            yPosition += 6;
           }
         });
         
-        yPosition += 10;
+        yPosition += 15;
       });
       
-      // Rodapé
-      checkPageBreak(15);
-      pdf.setFontSize(8);
-      pdf.setFont('helvetica', 'italic');
-      pdf.text(`Relatório gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, margin, yPosition);
-      yPosition += 4;
-      pdf.text('Sistema: PA BRASIL AUTOMAÇÃO - Inspeção Elétrica NR-10', margin, yPosition);
+      // Localização se disponível
+      if (currentInspecao.localizacao) {
+        checkPageBreak(20);
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('LOCALIZAÇÃO GPS', margin, yPosition);
+        yPosition += 8;
+        
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Coordenadas: ${currentInspecao.localizacao.latitude.toFixed(6)}, ${currentInspecao.localizacao.longitude.toFixed(6)}`, margin, yPosition);
+        yPosition += 5;
+        
+        if (currentInspecao.localizacao.endereco) {
+          pdf.text(`Endereço: ${currentInspecao.localizacao.endereco}`, margin, yPosition);
+          yPosition += 5;
+        }
+        
+        pdf.text(`Data/Hora: ${new Date(currentInspecao.localizacao.timestamp).toLocaleString('pt-BR')}`, margin, yPosition);
+        yPosition += 10;
+      }
       
-      // Nome do arquivo com extensão .pdf
-      const fileName = `relatorio-${currentInspecao.nomeCliente.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+      addFooter();
+      
+      // Nome do arquivo
+      const fileName = `RRTI-${currentInspecao.numeroSequencial}-${currentInspecao.nome.replace(/\s+/g, '-')}.pdf`;
       
       // Salvar o PDF
       pdf.save(fileName);
       
       // Mostrar mensagem de sucesso
-      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}`);
+      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}\n\nEstrutura profissional aplicada conforme especificações:\n✓ Marca d'água PA Brasil\n✓ Logo do cliente\n✓ Cabeçalho e rodapé profissionais\n✓ Numeração de páginas\n✓ Sumário estruturado`);
       
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
@@ -752,7 +1133,8 @@ export default function InspecaoEletrica() {
           endereco: 'Rua Bálsamo, 107 - Jardim Serrano - Paracatu/MG',
           telefone: '(38) 998368153',
           email: 'pabrasil@pabrasil.net',
-          logo: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg'
+          logo: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg',
+          marcaDagua: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg'
         },
         relatorios: {
           incluirFotos: true,
@@ -1323,6 +1705,21 @@ export default function InspecaoEletrica() {
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">URL da Marca D'água</label>
+                        <input
+                          type="url"
+                          value={configuracoes.empresa.marcaDagua}
+                          onChange={(e) => setConfiguracoes(prev => ({
+                            ...prev,
+                            empresa: { ...prev.empresa, marcaDagua: e.target.value }
+                          }))}
+                          placeholder="https://exemplo.com/marca-dagua.png"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">Esta imagem será usada como marca d'água nos PDFs</p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1486,7 +1883,7 @@ export default function InspecaoEletrica() {
                 <p className="text-gray-400">Clique em "Nova Inspeção" para começar</p>
               </div>
             ) : (
-              <ProfessionalTable headers={['Inspeção', 'Contrato', 'Cliente', 'Engenheiro', 'Data', 'Status', 'Progresso', 'Ações']}>
+              <ProfessionalTable headers={['Inspeção', 'Contrato', 'Cliente', 'Engenheiro', 'Data', 'Status', 'Localização', 'Progresso', 'Ações']}>
                 {inspecoes.map(inspecao => {
                   const stats = getInspecaoStats(inspecao);
                   const progresso = stats.totalItems > 0 ? 
@@ -1495,7 +1892,7 @@ export default function InspecaoEletrica() {
                   return (
                     <tr key={inspecao.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4">
-                        <div className="font-semibold text-gray-900">{inspecao.nomeCliente}</div>
+                        <div className="font-semibold text-gray-900">{inspecao.nome}</div>
                         <div className="text-sm text-blue-600 font-mono">{inspecao.numeroSequencial}</div>
                         <div className="text-xs text-gray-500">{inspecao.areas.length} área(s)</div>
                       </td>
@@ -1513,7 +1910,7 @@ export default function InspecaoEletrica() {
                       </td>
                       
                       <td className="px-4 py-4 text-sm text-gray-700">
-                        {new Date(inspecao.dataInspecao).toLocaleDateString('pt-BR')}
+                        {new Date(inspecao.data).toLocaleDateString('pt-BR')}
                       </td>
                       
                       <td className="px-4 py-4">
@@ -1524,6 +1921,20 @@ export default function InspecaoEletrica() {
                         }`}>
                           {inspecao.status}
                         </span>
+                      </td>
+                      
+                      <td className="px-4 py-4">
+                        {inspecao.localizacao ? (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4 text-green-600" />
+                            <span className="text-xs text-green-700">GPS</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs text-gray-500">N/A</span>
+                          </div>
+                        )}
                       </td>
                       
                       <td className="px-4 py-4">
@@ -1628,8 +2039,8 @@ export default function InspecaoEletrica() {
                 </label>
                 <input
                   type="text"
-                  value={novaInspecao.nomeCliente}
-                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, nomeCliente: e.target.value }))}
+                  value={novaInspecao.nome}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, nome: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Empresa ABC Ltda"
                 />
@@ -1680,23 +2091,24 @@ export default function InspecaoEletrica() {
                 </label>
                 <input
                   type="date"
-                  value={novaInspecao.dataInspecao}
-                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, dataInspecao: e.target.value }))}
+                  value={novaInspecao.data}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, data: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Observação
+                  Logo do Cliente (URL)
                 </label>
-                <textarea
-                  value={novaInspecao.observacao}
-                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, observacao: e.target.value }))}
+                <input
+                  type="url"
+                  value={novaInspecao.logoCliente}
+                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, logoCliente: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Observações gerais sobre a inspeção..."
-                  rows={3}
+                  placeholder="https://exemplo.com/logo-cliente.png"
                 />
+                <p className="text-sm text-gray-500 mt-1">Logo que aparecerá no PDF (opcional)</p>
               </div>
             </div>
 
@@ -1715,6 +2127,9 @@ export default function InspecaoEletrica() {
               </button>
             </div>
           </NumberedSection>
+
+          {/* Componente de Geolocalização */}
+          <GeolocationComponent />
         </div>
       </div>
     );
@@ -1736,19 +2151,20 @@ export default function InspecaoEletrica() {
                   <Home className="w-6 h-6" />
                 </button>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{currentInspecao.nomeCliente}</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">{currentInspecao.nome}</h1>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-2">
                     <span>Contrato: {currentInspecao.numeroContrato}</span>
                     <span>Responsável: {currentInspecao.engenheiroResponsavel}</span>
                     <span>Cliente: {currentInspecao.responsavelCliente}</span>
                     <span className="font-medium text-blue-600">{currentInspecao.numeroSequencial}</span>
-                    <span>Data: {new Date(currentInspecao.dataInspecao).toLocaleDateString('pt-BR')}</span>
+                    <span>Data: {new Date(currentInspecao.data).toLocaleDateString('pt-BR')}</span>
+                    {currentInspecao.localizacao && (
+                      <span className="flex items-center gap-1 text-green-600">
+                        <MapPin className="w-4 h-4" />
+                        GPS: {currentInspecao.localizacao.latitude.toFixed(4)}, {currentInspecao.localizacao.longitude.toFixed(4)}
+                      </span>
+                    )}
                   </div>
-                  {currentInspecao.observacao && (
-                    <div className="mt-2 text-sm text-gray-600">
-                      <span className="font-medium">Observação:</span> {currentInspecao.observacao}
-                    </div>
-                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1762,6 +2178,9 @@ export default function InspecaoEletrica() {
               </div>
             </div>
           </div>
+
+          {/* Componente de Geolocalização na tela de inspeção */}
+          <GeolocationComponent />
 
           {/* Áreas */}
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -1890,7 +2309,7 @@ export default function InspecaoEletrica() {
                 </button>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">
-                    {currentArea.nome} - {currentInspecao.nomeCliente}
+                    {currentArea.nome} - {currentInspecao.nome}
                   </h1>
                   <p className="text-gray-600">
                     Checklist NR-10 com {currentArea.items.length} itens de inspeção elétrica
@@ -1919,12 +2338,12 @@ export default function InspecaoEletrica() {
             <div className="overflow-x-auto">
               {/* Div invisível para forçar barra de rolagem no topo */}
               <div className="h-4 overflow-x-auto mb-2">
-                <div style={{ width: '1200px', height: '1px' }}></div>
+                <div style={{ width: '1400px', height: '1px' }}></div>
               </div>
               
               {/* Tabela principal */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1200px]">
+                <table className="w-full min-w-[1400px]">
                   <thead className="bg-gray-800 text-white sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
@@ -1935,7 +2354,8 @@ export default function InspecaoEletrica() {
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">FE</th>
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">GSD</th>
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Comentário</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendações</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Imagem Padrão</th>
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
                     </tr>
                   </thead>
@@ -2022,15 +2442,32 @@ export default function InspecaoEletrica() {
                           </select>
                         </td>
 
-                        {/* Comentário - REMOVIDA LIMITAÇÃO DE CARACTERES */}
+                        {/* Recomendações */}
                         <td className="px-4 py-4">
                           <textarea
-                            value={item.comentario}
-                            onChange={(e) => updateItem(currentArea.id, item.id, 'comentario', e.target.value)}
-                            placeholder="Adicione observações..."
+                            value={item.recomendacoes}
+                            onChange={(e) => updateItem(currentArea.id, item.id, 'recomendacoes', e.target.value)}
+                            placeholder="Adicione recomendações técnicas..."
                             className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                             rows={2}
                           />
+                        </td>
+
+                        {/* Imagem Padrão */}
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <img
+                              src={item.imagemPadrao}
+                              alt={`Referência para item ${item.id}`}
+                              className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
+                              onClick={() => window.open(item.imagemPadrao, '_blank')}
+                              title="Clique para ver em tamanho maior"
+                            />
+                            <div className="flex items-center gap-1 text-xs text-gray-500">
+                              <Image className="w-3 h-3" />
+                              <span>Ref.</span>
+                            </div>
+                          </div>
                         </td>
 
                         {/* Mídia */}
