@@ -31,6 +31,7 @@ interface ChecklistItem {
   imagemPadrao: string;
   medias: MediaFile[];
   selected: boolean;
+  precisaImagem: boolean; // Nova propriedade para indicar se o item precisa de imagem padrão
 }
 
 interface Area {
@@ -107,9 +108,15 @@ interface ImagemPadraoItem {
   descricao: string;
   imagemPadrao: string;
   categoria: string;
+  precisaImagem: boolean; // Nova propriedade para controlar se o item precisa de imagem
 }
 
-const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected'>[] = [
+// Configuração global de quais itens precisam de imagem padrão
+interface ConfiguracaoImagensPadrao {
+  itensSelecionados: number[]; // IDs dos itens que devem ter imagem padrão
+}
+
+const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected' | 'precisaImagem'>[] = [
   { id: 1, norma: "NR10.3.9-d", descricao: "A sala ou subestação está identificada? Item 10.10.1-c – NR-10" },
   { id: 2, norma: "NR10.4.1", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir acidentes e outras ocorrências originadas por choque elétrico?" },
   { id: 3, norma: "NR10.4.2", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir incêndios e explosões?" },
@@ -226,6 +233,11 @@ export default function InspecaoEletrica() {
   const [editingImage, setEditingImage] = useState<number | null>(null);
   const [newImageUrl, setNewImageUrl] = useState('');
 
+  // Estados para configuração de imagens padrão
+  const [configuracaoImagensPadrao, setConfiguracaoImagensPadrao] = useState<ConfiguracaoImagensPadrao>({
+    itensSelecionados: [] // Inicialmente nenhum item selecionado
+  });
+
   // Estados para configurações
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoSistema>({
     empresa: {
@@ -274,7 +286,8 @@ export default function InspecaoEletrica() {
       norma: item.norma,
       descricao: item.descricao,
       imagemPadrao: getDefaultImageForItem(item.id),
-      categoria: getCategoryForItem(item.norma)
+      categoria: getCategoryForItem(item.norma),
+      precisaImagem: false // Inicialmente nenhum item precisa de imagem
     }));
     setImagensPadrao(imagensIniciais);
   }, []);
@@ -336,6 +349,42 @@ export default function InspecaoEletrica() {
     setEditingImage(null);
     setNewImageUrl('');
     alert('Imagem padrão atualizada com sucesso!');
+  };
+
+  // Função para alternar seleção de item para imagem padrão
+  const toggleItemImagemPadrao = (itemId: number) => {
+    setImagensPadrao(prev => prev.map(item => 
+      item.id === itemId ? { ...item, precisaImagem: !item.precisaImagem } : item
+    ));
+
+    setConfiguracaoImagensPadrao(prev => ({
+      ...prev,
+      itensSelecionados: prev.itensSelecionados.includes(itemId)
+        ? prev.itensSelecionados.filter(id => id !== itemId)
+        : [...prev.itensSelecionados, itemId]
+    }));
+  };
+
+  // Função para selecionar/deselecionar todos os itens para imagem padrão
+  const toggleAllItemsImagemPadrao = () => {
+    const todosIds = imagensPadrao.map(item => item.id);
+    const todosSelecionados = configuracaoImagensPadrao.itensSelecionados.length === todosIds.length;
+
+    if (todosSelecionados) {
+      // Desmarcar todos
+      setImagensPadrao(prev => prev.map(item => ({ ...item, precisaImagem: false })));
+      setConfiguracaoImagensPadrao(prev => ({ ...prev, itensSelecionados: [] }));
+    } else {
+      // Selecionar todos
+      setImagensPadrao(prev => prev.map(item => ({ ...item, precisaImagem: true })));
+      setConfiguracaoImagensPadrao(prev => ({ ...prev, itensSelecionados: todosIds }));
+    }
+  };
+
+  // Função para salvar configuração de imagens padrão
+  const salvarConfiguracaoImagensPadrao = () => {
+    localStorage.setItem('configuracao-imagens-padrao', JSON.stringify(configuracaoImagensPadrao));
+    alert(`Configuração salva com sucesso!\n${configuracaoImagensPadrao.itensSelecionados.length} itens selecionados para receber imagem padrão em novas inspeções.`);
   };
 
   // Filtrar imagens baseado na busca e categoria
@@ -624,6 +673,8 @@ export default function InspecaoEletrica() {
       .filter(item => selectedItems.includes(item.id))
       .map(item => {
         const imagemItem = imagensPadrao.find(img => img.id === item.id);
+        const precisaImagem = configuracaoImagensPadrao.itensSelecionados.includes(item.id);
+        
         return {
           id: item.id,
           norma: item.norma,
@@ -634,9 +685,10 @@ export default function InspecaoEletrica() {
           gsd: '',
           nper: '',
           recomendacoes: '',
-          imagemPadrao: imagemItem?.imagemPadrao || getDefaultImageForItem(item.id),
+          imagemPadrao: precisaImagem ? (imagemItem?.imagemPadrao || getDefaultImageForItem(item.id)) : '',
           medias: [],
-          selected: true
+          selected: true,
+          precisaImagem: precisaImagem
         };
       });
 
@@ -658,7 +710,8 @@ export default function InspecaoEletrica() {
     setCurrentView('inspecao');
     
     // Mostrar mensagem de confirmação
-    alert(`Área "${novaArea}" criada com sucesso!\nChecklist com ${selectedItems.length} itens NR-10 selecionados.`);
+    const itensComImagem = checklistSelecionado.filter(item => item.precisaImagem).length;
+    alert(`Área "${novaArea}" criada com sucesso!\nChecklist com ${selectedItems.length} itens NR-10 selecionados.\n${itensComImagem} itens receberão imagem padrão.`);
   };
 
   const addArea = () => {
@@ -667,6 +720,8 @@ export default function InspecaoEletrica() {
     // Criar checklist completo com todos os 75 itens
     const checklistCompleto: ChecklistItem[] = checklistItems.map(item => {
       const imagemItem = imagensPadrao.find(img => img.id === item.id);
+      const precisaImagem = configuracaoImagensPadrao.itensSelecionados.includes(item.id);
+      
       return {
         id: item.id,
         norma: item.norma,
@@ -677,9 +732,10 @@ export default function InspecaoEletrica() {
         gsd: '',
         nper: '',
         recomendacoes: '',
-        imagemPadrao: imagemItem?.imagemPadrao || getDefaultImageForItem(item.id),
+        imagemPadrao: precisaImagem ? (imagemItem?.imagemPadrao || getDefaultImageForItem(item.id)) : '',
         medias: [],
-        selected: true
+        selected: true,
+        precisaImagem: precisaImagem
       };
     });
 
@@ -700,7 +756,8 @@ export default function InspecaoEletrica() {
     setShowNovaAreaForm(false);
     
     // Mostrar mensagem de confirmação
-    alert(`Área "${novaArea}" criada com sucesso!\nChecklist completo com 75 itens NR-10 adicionado.`);
+    const itensComImagem = checklistCompleto.filter(item => item.precisaImagem).length;
+    alert(`Área "${novaArea}" criada com sucesso!\nChecklist completo com 75 itens NR-10 adicionado.\n${itensComImagem} itens receberão imagem padrão.`);
   };
 
   const updateItem = (areaId: string, itemId: number, field: keyof ChecklistItem, value: any) => {
@@ -1463,8 +1520,83 @@ export default function InspecaoEletrica() {
             </button>
           </div>
 
+          {/* Seção de Seleção de Itens */}
+          <NumberedSection number="1" title="SELEÇÃO DE ITENS PARA IMAGEM PADRÃO">
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={toggleAllItemsImagemPadrao}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                      configuracaoImagensPadrao.itensSelecionados.length === imagensPadrao.length
+                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {configuracaoImagensPadrao.itensSelecionados.length === imagensPadrao.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                  </button>
+                  <span className="text-sm text-gray-600 font-medium">
+                    {configuracaoImagensPadrao.itensSelecionados.length} de {imagensPadrao.length} itens selecionados para receber imagem padrão
+                  </span>
+                </div>
+                <button
+                  onClick={salvarConfiguracaoImagensPadrao}
+                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Save className="w-4 h-4" />
+                  Salvar Configuração
+                </button>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h5 className="font-medium text-blue-900">Como Funciona</h5>
+                    <p className="text-blue-800 text-sm mt-1">
+                      Selecione quais dos 75 itens NR-10 devem receber uma imagem padrão automaticamente quando novas áreas forem criadas. 
+                      Apenas os itens marcados terão suas imagens aplicadas nas inspeções futuras.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de Seleção de Itens */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {imagensPadrao.map((item) => (
+                  <div key={item.id} className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                    item.precisaImagem ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}>
+                    <div 
+                      className="flex items-start gap-3"
+                      onClick={() => toggleItemImagemPadrao(item.id)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.precisaImagem}
+                        onChange={() => toggleItemImagemPadrao(item.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                            {item.id}
+                          </div>
+                          <div className="text-sm font-medium text-blue-600">{item.norma}</div>
+                        </div>
+                        <p className="text-sm text-gray-700 line-clamp-2">{item.descricao}</p>
+                        <div className="text-xs text-gray-500 mt-1">{item.categoria}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </NumberedSection>
+
           {/* Controles de Busca e Filtro */}
-          <NumberedSection number="1" title="CONTROLES DE BUSCA E FILTRO">
+          <NumberedSection number="2" title="CONTROLES DE BUSCA E FILTRO">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1515,20 +1647,29 @@ export default function InspecaoEletrica() {
           </NumberedSection>
 
           {/* Lista de Imagens */}
-          <NumberedSection number="2" title="IMAGENS PADRÃO DOS ITENS NR-10">
+          <NumberedSection number="3" title="IMAGENS PADRÃO DOS ITENS NR-10">
             <div className="space-y-4">
               {imagensFiltradas.map((item) => (
-                <div key={item.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div key={item.id} className={`rounded-lg p-4 border ${
+                  item.precisaImagem ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                }`}>
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
                     {/* Informações do Item */}
                     <div className="lg:col-span-1 text-center">
-                      <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold mx-auto">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mx-auto ${
+                        item.precisaImagem ? 'bg-blue-600 text-white' : 'bg-gray-400 text-white'
+                      }`}>
                         {item.id}
                       </div>
+                      {item.precisaImagem && (
+                        <div className="text-xs text-blue-600 mt-1 font-medium">ATIVO</div>
+                      )}
                     </div>
 
                     <div className="lg:col-span-2">
-                      <div className="text-sm font-medium text-blue-600">{item.norma}</div>
+                      <div className={`text-sm font-medium ${item.precisaImagem ? 'text-blue-600' : 'text-gray-600'}`}>
+                        {item.norma}
+                      </div>
                       <div className="text-xs text-gray-500 mt-1">{item.categoria}</div>
                     </div>
 
@@ -1538,63 +1679,78 @@ export default function InspecaoEletrica() {
 
                     {/* Imagem Atual */}
                     <div className="lg:col-span-2 text-center">
-                      <img
-                        src={item.imagemPadrao}
-                        alt={`Referência para item ${item.id}`}
-                        className="w-20 h-16 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity mx-auto"
-                        onClick={() => window.open(item.imagemPadrao, '_blank')}
-                        title="Clique para ver em tamanho maior"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Imagem Atual</p>
+                      {item.precisaImagem ? (
+                        <>
+                          <img
+                            src={item.imagemPadrao}
+                            alt={`Referência para item ${item.id}`}
+                            className="w-20 h-16 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity mx-auto"
+                            onClick={() => window.open(item.imagemPadrao, '_blank')}
+                            title="Clique para ver em tamanho maior"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Imagem Ativa</p>
+                        </>
+                      ) : (
+                        <div className="w-20 h-16 bg-gray-200 rounded border flex items-center justify-center mx-auto">
+                          <Image className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
                     </div>
 
                     {/* Controles de Edição */}
                     <div className="lg:col-span-3">
-                      {editingImage === item.id ? (
-                        <div className="space-y-2">
-                          <input
-                            type="url"
-                            value={newImageUrl}
-                            onChange={(e) => setNewImageUrl(e.target.value)}
-                            placeholder="https://exemplo.com/nova-imagem.jpg"
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => updateImagemPadrao(item.id, newImageUrl)}
-                              disabled={!newImageUrl.trim()}
-                              className={`flex-1 px-3 py-2 text-xs rounded transition-colors ${
-                                newImageUrl.trim()
-                                  ? 'bg-green-600 text-white hover:bg-green-700'
-                                  : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                              }`}
-                            >
-                              <CheckCircle className="w-3 h-3 inline mr-1" />
-                              Salvar
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingImage(null);
-                                setNewImageUrl('');
-                              }}
-                              className="flex-1 px-3 py-2 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-                            >
-                              <XCircle className="w-3 h-3 inline mr-1" />
-                              Cancelar
-                            </button>
+                      {item.precisaImagem ? (
+                        editingImage === item.id ? (
+                          <div className="space-y-2">
+                            <input
+                              type="url"
+                              value={newImageUrl}
+                              onChange={(e) => setNewImageUrl(e.target.value)}
+                              placeholder="https://exemplo.com/nova-imagem.jpg"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => updateImagemPadrao(item.id, newImageUrl)}
+                                disabled={!newImageUrl.trim()}
+                                className={`flex-1 px-3 py-2 text-xs rounded transition-colors ${
+                                  newImageUrl.trim()
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                }`}
+                              >
+                                <CheckCircle className="w-3 h-3 inline mr-1" />
+                                Salvar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingImage(null);
+                                  setNewImageUrl('');
+                                }}
+                                className="flex-1 px-3 py-2 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                              >
+                                <XCircle className="w-3 h-3 inline mr-1" />
+                                Cancelar
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingImage(item.id);
+                              setNewImageUrl(item.imagemPadrao);
+                            }}
+                            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Alterar Imagem
+                          </button>
+                        )
                       ) : (
-                        <button
-                          onClick={() => {
-                            setEditingImage(item.id);
-                            setNewImageUrl(item.imagemPadrao);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                          Alterar Imagem
-                        </button>
+                        <div className="text-center text-gray-500">
+                          <p className="text-sm">Item não selecionado</p>
+                          <p className="text-xs">Marque o item acima para ativar</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1612,38 +1768,38 @@ export default function InspecaoEletrica() {
           </NumberedSection>
 
           {/* Instruções */}
-          <NumberedSection number="3" title="INSTRUÇÕES DE USO">
+          <NumberedSection number="4" title="INSTRUÇÕES DE USO">
             <div className="prose max-w-none">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Como Alterar Imagens</h4>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Como Configurar</h4>
                   <ol className="list-decimal list-inside space-y-2 text-gray-700">
-                    <li>Clique no botão "Alterar Imagem" do item desejado</li>
-                    <li>Cole a URL da nova imagem no campo que aparece</li>
-                    <li>Clique em "Salvar" para confirmar a alteração</li>
-                    <li>A imagem será atualizada em todas as inspeções futuras</li>
+                    <li>Na Seção 1, marque os itens que devem receber imagem padrão</li>
+                    <li>Clique em "Salvar Configuração" para aplicar as seleções</li>
+                    <li>Na Seção 3, altere as URLs das imagens dos itens ativos</li>
+                    <li>As configurações serão aplicadas em todas as novas inspeções</li>
                   </ol>
                 </div>
 
                 <div>
                   <h4 className="text-lg font-semibold text-gray-900 mb-3">Recomendações</h4>
                   <ul className="list-disc list-inside space-y-2 text-gray-700">
+                    <li>Selecione apenas itens que realmente precisam de referência visual</li>
                     <li>Use imagens de alta qualidade (mínimo 400x300px)</li>
                     <li>Prefira URLs de serviços confiáveis (Unsplash, etc.)</li>
-                    <li>Certifique-se de que a imagem representa o item NR-10</li>
-                    <li>Teste a URL antes de salvar para evitar links quebrados</li>
+                    <li>Teste as URLs antes de salvar para evitar links quebrados</li>
                   </ul>
                 </div>
               </div>
 
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
                   <div>
-                    <h5 className="font-medium text-blue-900">Importante</h5>
-                    <p className="text-blue-800 text-sm mt-1">
-                      As alterações nas imagens padrão afetarão apenas as novas áreas criadas após a modificação. 
-                      Áreas já existentes manterão suas imagens originais.
+                    <h5 className="font-medium text-green-900">Aplicação Automática</h5>
+                    <p className="text-green-800 text-sm mt-1">
+                      Quando você criar uma nova área de inspeção, apenas os itens selecionados na Seção 1 receberão 
+                      automaticamente suas imagens padrão. Isso otimiza o processo e evita carregar imagens desnecessárias.
                     </p>
                   </div>
                 </div>
@@ -2223,7 +2379,7 @@ export default function InspecaoEletrica() {
               >
                 <Image className="w-8 h-8 mx-auto mb-3" />
                 <h3 className="text-lg font-semibold mb-2">Gerenciar Imagens</h3>
-                <p className="text-sm opacity-90">Alterar imagens padrão dos 75 itens</p>
+                <p className="text-sm opacity-90">Selecionar e alterar imagens padrão</p>
               </button>
 
               <button 
@@ -2819,17 +2975,25 @@ export default function InspecaoEletrica() {
                         {/* Imagem Padrão */}
                         <td className="px-4 py-4 text-center">
                           <div className="flex flex-col items-center gap-2">
-                            <img
-                              src={item.imagemPadrao}
-                              alt={`Referência para item ${item.id}`}
-                              className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
-                              onClick={() => window.open(item.imagemPadrao, '_blank')}
-                              title="Clique para ver em tamanho maior"
-                            />
-                            <div className="flex items-center gap-1 text-xs text-gray-500">
-                              <Image className="w-3 h-3" />
-                              <span>Ref.</span>
-                            </div>
+                            {item.precisaImagem && item.imagemPadrao ? (
+                              <>
+                                <img
+                                  src={item.imagemPadrao}
+                                  alt={`Referência para item ${item.id}`}
+                                  className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
+                                  onClick={() => window.open(item.imagemPadrao, '_blank')}
+                                  title="Clique para ver em tamanho maior"
+                                />
+                                <div className="flex items-center gap-1 text-xs text-blue-600">
+                                  <Image className="w-3 h-3" />
+                                  <span>Ref.</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-16 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                                <Image className="w-4 h-4 text-gray-400" />
+                              </div>
+                            )}
                           </div>
                         </td>
 
