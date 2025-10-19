@@ -23,15 +23,16 @@ interface ChecklistItem {
   norma: string;
   descricao: string;
   condicao: 'C' | 'NC' | 'NA' | '';
-  po: 'C' | 'NC' | 'NA' | '';
-  fe: 'C' | 'NC' | 'NA' | '';
-  gsd: 'C' | 'NC' | 'NA' | '';
-  nper: 'C' | 'NC' | 'NA' | '';
+  po: string; // Agora string para valores numéricos com descrição
+  fe: string; // Agora string para valores numéricos com descrição
+  gsd: string; // Agora string para valores numéricos com descrição
+  nper: string; // Agora string para valores numéricos com descrição
   recomendacoes: string;
   imagemPadrao: string;
   medias: MediaFile[];
   selected: boolean;
-  precisaImagem: boolean; // Nova propriedade para indicar se o item precisa de imagem padrão
+  precisaImagem: boolean;
+  hrn?: number; // Novo campo para armazenar o valor HRN calculado
 }
 
 // Nova interface para itens de painéis elétricos
@@ -50,8 +51,9 @@ interface Area {
   id: string;
   nome: string;
   items: ChecklistItem[];
-  painelItems?: PainelEletricoItem[]; // Nova propriedade para itens de painéis
-  tipoChecklist: 'subestacoes' | 'paineis'; // Tipo do checklist
+  painelItems?: PainelEletricoItem[];
+  tipoChecklist: 'subestacoes' | 'paineis';
+  hrnTotal?: number; // Novo campo para HRN total da área
 }
 
 interface Localizacao {
@@ -74,7 +76,8 @@ interface Inspecao {
   status: 'Em Andamento' | 'Concluída' | 'Pendente';
   createdAt: string;
   localizacao?: Localizacao;
-  logoCliente?: string; // Nova propriedade para logo do cliente
+  logoCliente?: string;
+  hrnTotalCliente?: number; // Novo campo para HRN total do cliente
 }
 
 interface ConfiguracaoSistema {
@@ -85,7 +88,7 @@ interface ConfiguracaoSistema {
     telefone: string;
     email: string;
     logo: string;
-    marcaDagua: string; // Nova propriedade para marca d'água
+    marcaDagua: string;
   };
   relatorios: {
     incluirFotos: boolean;
@@ -122,15 +125,83 @@ interface ImagemPadraoItem {
   descricao: string;
   imagemPadrao: string;
   categoria: string;
-  precisaImagem: boolean; // Nova propriedade para controlar se o item precisa de imagem
+  precisaImagem: boolean;
 }
 
 // Configuração global de quais itens precisam de imagem padrão
 interface ConfiguracaoImagensPadrao {
-  itensSelecionados: number[]; // IDs dos itens que devem ter imagem padrão
+  itensSelecionados: number[];
 }
 
-const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected' | 'precisaImagem'>[] = [
+// CONSTANTES PARA OS NOVOS VALORES NUMÉRICOS COM DESCRIÇÕES
+const PO_OPTIONS = [
+  { value: '', label: 'Selecione...' },
+  { value: '0.033', label: '0,033 - Quase Impossível' },
+  { value: '1', label: '1 - Altamente Improvável' },
+  { value: '1.5', label: '1,5 - Improvável' },
+  { value: '2', label: '2 - Possível' },
+  { value: '5', label: '5 - Alguma Chance' },
+  { value: '8', label: '8 - Provável' },
+  { value: '10', label: '10 - Muito Provável' },
+  { value: '15', label: '15 - Certeza' }
+];
+
+const FE_OPTIONS = [
+  { value: '', label: 'Selecione...' },
+  { value: '0.5', label: '0,5 - Anualmente' },
+  { value: '1', label: '1 - Mensalmente' },
+  { value: '1.5', label: '1,5 - Semanalmente' },
+  { value: '2.5', label: '2,5 - Possível' },
+  { value: '4', label: '4 - Em Tempo de Hora' },
+  { value: '5', label: '5 - Constantemente' }
+];
+
+const GSD_OPTIONS = [
+  { value: '', label: 'Selecione...' },
+  { value: '0.1', label: '0,1 - Escoriação' },
+  { value: '0.5', label: '0,5 - Dilaceração/Corte/Enfer. Leve' },
+  { value: '1', label: '1 - Fratura Leve Ossos/Mão/Braço/Perna' },
+  { value: '2', label: '2 - Fratura Grave Ossos/Mão/Braço/Perna' },
+  { value: '4', label: '4 - Perda de 1 ou 2 Dedos das Mãos/Pés' },
+  { value: '8', label: '8 - Amputação da Perna/Mão Perda Parcial Visão/Audição' },
+  { value: '10', label: '10 - Amputação de 2 Pernas/Mãos Perda Parcial Visão/Audição' },
+  { value: '12', label: '12 - Enfermidade Permanente ou Crítica' },
+  { value: '15', label: '15 - Fatalidade' }
+];
+
+const NPER_OPTIONS = [
+  { value: '', label: 'Selecione...' },
+  { value: '1', label: '1 - 1-2 Pessoas' },
+  { value: '2', label: '2 - 3-7 Pessoas' },
+  { value: '4', label: '4 - 8-15 Pessoas' },
+  { value: '8', label: '8 - 16-50 Pessoas' },
+  { value: '12', label: '12 - Mais de 50 Pessoas' }
+];
+
+// FUNÇÃO PARA CALCULAR HRN
+const calcularHRN = (po: string, fe: string, gsd: string, nper: string): number => {
+  const poValue = parseFloat(po) || 0;
+  const feValue = parseFloat(fe) || 0;
+  const gsdValue = parseFloat(gsd) || 0;
+  const nperValue = parseFloat(nper) || 0;
+  
+  return poValue * feValue * gsdValue * nperValue;
+};
+
+// FUNÇÃO PARA OBTER COR DO HRN BASEADA NA IMAGEM ANALISADA
+const getHRNColor = (hrn: number): { bg: string; text: string; label: string } => {
+  if (hrn >= 0 && hrn <= 1) return { bg: 'bg-green-100', text: 'text-green-800', label: 'Aceitável' };
+  if (hrn > 1 && hrn <= 5) return { bg: 'bg-green-200', text: 'text-green-900', label: 'Muito Baixo' };
+  if (hrn > 5 && hrn <= 10) return { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Baixo' };
+  if (hrn > 10 && hrn <= 50) return { bg: 'bg-yellow-200', text: 'text-yellow-900', label: 'Significante' };
+  if (hrn > 50 && hrn <= 100) return { bg: 'bg-red-100', text: 'text-red-800', label: 'Alto' };
+  if (hrn > 100 && hrn <= 500) return { bg: 'bg-red-200', text: 'text-red-900', label: 'Muito Alto' };
+  if (hrn > 500 && hrn <= 1000) return { bg: 'bg-red-300', text: 'text-red-900', label: 'Extremo' };
+  if (hrn > 1000) return { bg: 'bg-red-400', text: 'text-red-900', label: 'Inaceitável' };
+  return { bg: 'bg-gray-100', text: 'text-gray-800', label: 'N/A' };
+};
+
+const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected' | 'precisaImagem' | 'hrn'>[] = [
   { id: 1, norma: "NR10.3.9-d", descricao: "A sala ou subestação está identificada? Item 10.10.1-c – NR-10" },
   { id: 2, norma: "NR10.4.1", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir acidentes e outras ocorrências originadas por choque elétrico?" },
   { id: 3, norma: "NR10.4.2", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir incêndios e explosões?" },
@@ -255,7 +326,7 @@ export default function InspecaoEletrica() {
     engenheiroResponsavel: '',
     responsavelCliente: '',
     data: new Date().toISOString().split('T')[0],
-    logoCliente: '' // Novo campo para logo do cliente
+    logoCliente: ''
   });
 
   // Estados para nova área
@@ -274,7 +345,7 @@ export default function InspecaoEletrica() {
 
   // Estados para configuração de imagens padrão
   const [configuracaoImagensPadrao, setConfiguracaoImagensPadrao] = useState<ConfiguracaoImagensPadrao>({
-    itensSelecionados: [] // Inicialmente nenhum item selecionado
+    itensSelecionados: []
   });
 
   // Estados para configurações
@@ -286,7 +357,7 @@ export default function InspecaoEletrica() {
       telefone: '(38) 998368153',
       email: 'pabrasil@pabrasil.net',
       logo: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg',
-      marcaDagua: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg' // Marca d'água PA Brasil
+      marcaDagua: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg'
     },
     relatorios: {
       incluirFotos: true,
@@ -326,7 +397,7 @@ export default function InspecaoEletrica() {
       descricao: item.descricao,
       imagemPadrao: getDefaultImageForItem(item.id),
       categoria: getCategoryForItem(item.norma),
-      precisaImagem: false // Inicialmente nenhum item precisa de imagem
+      precisaImagem: false
     }));
     setImagensPadrao(imagensIniciais);
   }, []);
@@ -334,17 +405,16 @@ export default function InspecaoEletrica() {
   // Função para obter imagem padrão baseada no tipo de item
   const getDefaultImageForItem = (itemId: number): string => {
     const imageMap: { [key: number]: string } = {
-      1: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80', // Identificação
-      2: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&q=80', // Prevenção acidentes
-      3: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400&h=300&fit=crop&q=80', // Prevenção incêndios
-      4: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80', // Prevenção geral
-      5: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop&q=80', // Manutenção
-      6: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop&q=80', // Manutenção preventiva
-      7: 'https://images.unsplash.com/photo-1621905252472-e8592afb8f2f?w=400&h=300&fit=crop&q=80', // Inspeção
-      8: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop&q=80', // Aterramento
-      9: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop&q=80', // Verificação aterramento
-      10: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&q=80', // EPC
-      // Continua para todos os 75 itens...
+      1: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80',
+      2: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&q=80',
+      3: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400&h=300&fit=crop&q=80',
+      4: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80',
+      5: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop&q=80',
+      6: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop&q=80',
+      7: 'https://images.unsplash.com/photo-1621905252472-e8592afb8f2f?w=400&h=300&fit=crop&q=80',
+      8: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop&q=80',
+      9: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop&q=80',
+      10: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&q=80',
     };
     
     return imageMap[itemId] || 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80';
@@ -390,16 +460,14 @@ export default function InspecaoEletrica() {
     alert('Imagem padrão atualizada com sucesso!');
   };
 
-  // Função para alternar seleção de item para imagem padrão - CORRIGIDA
+  // Função para alternar seleção de item para imagem padrão
   const toggleItemImagemPadrao = (itemId: number) => {
     const isCurrentlySelected = configuracaoImagensPadrao.itensSelecionados.includes(itemId);
     
-    // Atualizar estado das imagens padrão
     setImagensPadrao(prev => prev.map(item => 
       item.id === itemId ? { ...item, precisaImagem: !isCurrentlySelected } : item
     ));
 
-    // Atualizar configuração de itens selecionados
     setConfiguracaoImagensPadrao(prev => ({
       ...prev,
       itensSelecionados: isCurrentlySelected
@@ -408,23 +476,21 @@ export default function InspecaoEletrica() {
     }));
   };
 
-  // Função para selecionar/deselecionar todos os itens para imagem padrão - CORRIGIDA
+  // Função para selecionar/deselecionar todos os itens para imagem padrão
   const toggleAllItemsImagemPadrao = () => {
     const todosIds = imagensPadrao.map(item => item.id);
     const todosSelecionados = configuracaoImagensPadrao.itensSelecionados.length === todosIds.length;
 
     if (todosSelecionados) {
-      // Desmarcar todos
       setImagensPadrao(prev => prev.map(item => ({ ...item, precisaImagem: false })));
       setConfiguracaoImagensPadrao(prev => ({ ...prev, itensSelecionados: [] }));
     } else {
-      // Selecionar todos
       setImagensPadrao(prev => prev.map(item => ({ ...item, precisaImagem: true })));
       setConfiguracaoImagensPadrao(prev => ({ ...prev, itensSelecionados: todosIds }));
     }
   };
 
-  // Função para salvar configuração de imagens padrão - CORRIGIDA
+  // Função para salvar configuração de imagens padrão
   const salvarConfiguracaoImagensPadrao = () => {
     try {
       localStorage.setItem('configuracao-imagens-padrao', JSON.stringify(configuracaoImagensPadrao));
@@ -490,13 +556,11 @@ export default function InspecaoEletrica() {
           }
         }
       } catch (geocodeError) {
-        // Se falhar o geocoding, continua sem o endereço
         console.log('Não foi possível obter o endereço, mas a localização foi capturada');
       }
 
       setLocalizacao(novaLocalizacao);
       
-      // Se estiver criando uma inspeção, adicionar a localização
       if (currentInspecao) {
         const updatedInspecao = {
           ...currentInspecao,
@@ -624,7 +688,6 @@ export default function InspecaoEletrica() {
   const generateSequentialNumber = (responsavelCliente: string): string => {
     const currentYear = new Date().getFullYear();
     
-    // Contar quantas inspeções já existem para este cliente no ano atual
     const clienteInspecoes = inspecoes.filter(inspecao => {
       const inspecaoYear = new Date(inspecao.createdAt).getFullYear();
       return inspecao.responsavelCliente === responsavelCliente && inspecaoYear === currentYear;
@@ -642,7 +705,6 @@ export default function InspecaoEletrica() {
       return;
     }
 
-    // Gerar número sequencial baseado no responsável do cliente
     const numeroSequencial = generateSequentialNumber(novaInspecao.responsavelCliente);
 
     const inspecao: Inspecao = {
@@ -664,7 +726,6 @@ export default function InspecaoEletrica() {
     setCurrentInspecao(inspecao);
     setCurrentView('inspecao');
     
-    // Reset form
     setNovaInspecao({
       nome: '',
       numeroContrato: '',
@@ -674,7 +735,6 @@ export default function InspecaoEletrica() {
       logoCliente: ''
     });
 
-    // Mostrar mensagem com o número sequencial gerado
     alert(`Inspeção criada com sucesso!\nNúmero sequencial: ${numeroSequencial}${localizacao ? '\nLocalização capturada e anexada!' : ''}`);
   };
 
@@ -685,9 +745,9 @@ export default function InspecaoEletrica() {
   const showItemSelectionForType = (tipo: 'subestacoes' | 'paineis') => {
     setTipoChecklistSelecionado(tipo);
     if (tipo === 'subestacoes') {
-      setSelectedItems(checklistItems.map(item => item.id)); // Selecionar todos por padrão
+      setSelectedItems(checklistItems.map(item => item.id));
     } else {
-      setSelectedItems(painelEletricoItems.map(item => item.id)); // Selecionar todos por padrão
+      setSelectedItems(painelEletricoItems.map(item => item.id));
     }
     setSelectAllItems(true);
     setCurrentView('selecionar-itens');
@@ -697,11 +757,9 @@ export default function InspecaoEletrica() {
     const itemsToSelect = tipoChecklistSelecionado === 'subestacoes' ? checklistItems : painelEletricoItems;
     
     if (selectAllItems) {
-      // Se todos estão selecionados, desmarcar todos
       setSelectedItems([]);
       setSelectAllItems(false);
     } else {
-      // Se nem todos estão selecionados, selecionar todos
       setSelectedItems(itemsToSelect.map(item => item.id));
       setSelectAllItems(true);
     }
@@ -715,14 +773,16 @@ export default function InspecaoEletrica() {
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId];
       
-      // Atualizar o estado do "Selecionar Todos" baseado na nova seleção
       setSelectAllItems(newSelection.length === itemsToSelect.length);
       return newSelection;
     });
   };
 
   const addAreaWithSelectedItems = () => {
-    if (!novaArea.trim() || !currentInspecao) return;
+    if (!novaArea.trim() || !currentInspecao) {
+      alert('Preencha o nome da área antes de continuar');
+      return;
+    }
 
     if (selectedItems.length === 0) {
       alert('Selecione pelo menos um item para inspeção');
@@ -730,7 +790,6 @@ export default function InspecaoEletrica() {
     }
 
     if (tipoChecklistSelecionado === 'subestacoes') {
-      // Criar checklist apenas com os itens selecionados (75 itens NR-10)
       const checklistSelecionado: ChecklistItem[] = checklistItems
         .filter(item => selectedItems.includes(item.id))
         .map(item => {
@@ -750,7 +809,8 @@ export default function InspecaoEletrica() {
             imagemPadrao: precisaImagem ? (imagemItem?.imagemPadrao || getDefaultImageForItem(item.id)) : '',
             medias: [],
             selected: true,
-            precisaImagem: precisaImagem
+            precisaImagem: precisaImagem,
+            hrn: 0
           };
         });
 
@@ -758,7 +818,8 @@ export default function InspecaoEletrica() {
         id: Date.now().toString(),
         nome: novaArea,
         items: checklistSelecionado,
-        tipoChecklist: 'subestacoes'
+        tipoChecklist: 'subestacoes',
+        hrnTotal: 0
       };
 
       const updatedInspecao = {
@@ -772,11 +833,9 @@ export default function InspecaoEletrica() {
       setShowNovaAreaForm(false);
       setCurrentView('inspecao');
       
-      // Mostrar mensagem de confirmação
       const itensComImagem = checklistSelecionado.filter(item => item.precisaImagem).length;
       alert(`Área "${novaArea}" criada com sucesso!\nCheck List para Subestações com ${selectedItems.length} itens NR-10 selecionados.\n${itensComImagem} itens receberão imagem padrão.`);
     } else {
-      // Criar checklist para painéis elétricos (20 itens)
       const painelSelecionado: PainelEletricoItem[] = painelEletricoItems
         .filter(item => selectedItems.includes(item.id))
         .map(item => ({
@@ -793,7 +852,7 @@ export default function InspecaoEletrica() {
       const area: Area = {
         id: Date.now().toString(),
         nome: novaArea,
-        items: [], // Vazio para painéis
+        items: [],
         painelItems: painelSelecionado,
         tipoChecklist: 'paineis'
       };
@@ -816,7 +875,6 @@ export default function InspecaoEletrica() {
   const addArea = () => {
     if (!novaArea.trim() || !currentInspecao) return;
 
-    // Criar checklist completo com todos os 75 itens
     const checklistCompleto: ChecklistItem[] = checklistItems.map(item => {
       const imagemItem = imagensPadrao.find(img => img.id === item.id);
       const precisaImagem = configuracaoImagensPadrao.itensSelecionados.includes(item.id);
@@ -834,7 +892,8 @@ export default function InspecaoEletrica() {
         imagemPadrao: precisaImagem ? (imagemItem?.imagemPadrao || getDefaultImageForItem(item.id)) : '',
         medias: [],
         selected: true,
-        precisaImagem: precisaImagem
+        precisaImagem: precisaImagem,
+        hrn: 0
       };
     });
 
@@ -842,7 +901,8 @@ export default function InspecaoEletrica() {
       id: Date.now().toString(),
       nome: novaArea,
       items: checklistCompleto,
-      tipoChecklist: 'subestacoes'
+      tipoChecklist: 'subestacoes',
+      hrnTotal: 0
     };
 
     const updatedInspecao = {
@@ -855,11 +915,11 @@ export default function InspecaoEletrica() {
     setNovaArea('');
     setShowNovaAreaForm(false);
     
-    // Mostrar mensagem de confirmação
     const itensComImagem = checklistCompleto.filter(item => item.precisaImagem).length;
     alert(`Área "${novaArea}" criada com sucesso!\nCheck List para Subestações completo com 75 itens NR-10 adicionado.\n${itensComImagem} itens receberão imagem padrão.`);
   };
 
+  // FUNÇÃO ATUALIZADA PARA CALCULAR HRN AUTOMATICAMENTE
   const updateItem = (areaId: string, itemId: number, field: keyof ChecklistItem, value: any) => {
     if (!currentInspecao) return;
 
@@ -869,13 +929,35 @@ export default function InspecaoEletrica() {
         area.id === areaId 
           ? {
               ...area,
-              items: area.items.map(item => 
-                item.id === itemId ? { ...item, [field]: value } : item
-              )
+              items: area.items.map(item => {
+                if (item.id === itemId) {
+                  const updatedItem = { ...item, [field]: value };
+                  
+                  // Calcular HRN se a condição for NC e todos os campos estiverem preenchidos
+                  if (updatedItem.condicao === 'NC' && updatedItem.po && updatedItem.fe && updatedItem.gsd && updatedItem.nper) {
+                    updatedItem.hrn = calcularHRN(updatedItem.po, updatedItem.fe, updatedItem.gsd, updatedItem.nper);
+                  } else {
+                    updatedItem.hrn = 0;
+                  }
+                  
+                  return updatedItem;
+                } else {
+                  return item;
+                }
+              })
             }
           : area
       )
     };
+
+    // Recalcular HRN total da área
+    const areaAtualizada = updatedInspecao.areas.find(a => a.id === areaId);
+    if (areaAtualizada) {
+      areaAtualizada.hrnTotal = areaAtualizada.items.reduce((total, item) => total + (item.hrn || 0), 0);
+    }
+
+    // Recalcular HRN total do cliente
+    updatedInspecao.hrnTotalCliente = updatedInspecao.areas.reduce((total, area) => total + (area.hrnTotal || 0), 0);
 
     setCurrentInspecao(updatedInspecao);
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
@@ -1017,15 +1099,13 @@ export default function InspecaoEletrica() {
     }
   };
 
-  // FUNÇÃO PARA GERAR PDF COM ESTRUTURA PROFISSIONAL E MARCA D'ÁGUA - VERSÃO CORRIGIDA
+  // FUNÇÃO PARA GERAR PDF (mantida igual)
   const generatePDF = async () => {
     if (!currentInspecao) return;
     
     try {
-      // Verificar se jsPDF está disponível globalmente primeiro
       let jsPDF = (window as any).jsPDF;
       
-      // Se não estiver disponível, tentar carregar via CDN
       if (!jsPDF) {
         console.log('Carregando jsPDF via CDN...');
         const script = document.createElement('script');
@@ -1039,8 +1119,6 @@ export default function InspecaoEletrica() {
             resolve(jsPDF);
           };
           script.onerror = () => reject(new Error('Falha ao carregar jsPDF via CDN'));
-          
-          // Timeout de 10 segundos
           setTimeout(() => reject(new Error('Timeout ao carregar jsPDF')), 10000);
         });
       }
@@ -1049,17 +1127,14 @@ export default function InspecaoEletrica() {
         throw new Error('jsPDF não está disponível');
       }
       
-      // Criar nova instância do PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
       
-      // Configurações
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 20;
       let yPosition = margin;
       let pageNumber = 1;
       
-      // Função para adicionar marca d'água em todas as páginas
       const addWatermark = () => {
         if (configuracoes.relatorios.marcaDagua && configuracoes.empresa.marcaDagua) {
           pdf.setGState(new pdf.GState({ opacity: 0.1 }));
@@ -1077,18 +1152,13 @@ export default function InspecaoEletrica() {
         }
       };
 
-      // Função para adicionar cabeçalho profissional
       const addHeader = () => {
-        // Marca d'água
         addWatermark();
         
-        // Barra laranja lateral (baseada nas imagens)
-        pdf.setFillColor(255, 140, 0); // Laranja
+        pdf.setFillColor(255, 140, 0);
         pdf.rect(0, 0, 8, pageHeight, 'F');
         
-        // Logo PA Brasil (canto superior esquerdo)
         try {
-          // Placeholder para logo - em produção, usar imagem real
           pdf.setFillColor(255, 255, 255);
           pdf.rect(margin, margin, 30, 20, 'F');
           pdf.setFontSize(8);
@@ -1099,7 +1169,6 @@ export default function InspecaoEletrica() {
           console.log('Erro ao adicionar logo PA Brasil');
         }
 
-        // Logo do Cliente (canto superior direito)
         if (currentInspecao.logoCliente) {
           try {
             pdf.setFillColor(240, 240, 240);
@@ -1112,7 +1181,6 @@ export default function InspecaoEletrica() {
           }
         }
 
-        // Informações do documento (baseado nas imagens)
         pdf.setFillColor(240, 240, 240);
         pdf.rect(pageWidth - margin - 60, margin + 25, 60, 25, 'F');
         pdf.setFontSize(8);
@@ -1125,27 +1193,22 @@ export default function InspecaoEletrica() {
         yPosition = margin + 60;
       };
 
-      // Função para adicionar rodapé profissional
       const addFooter = () => {
         const footerY = pageHeight - 20;
         
-        // Linha separadora
         pdf.setDrawColor(200, 200, 200);
         pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
         
-        // Informações da empresa
         pdf.setFontSize(8);
         pdf.setTextColor(100, 100, 100);
         pdf.text(configuracoes.empresa.nome, margin, footerY);
         pdf.text(`${configuracoes.empresa.telefone} | ${configuracoes.empresa.email}`, margin, footerY + 4);
         pdf.text(configuracoes.empresa.endereco, margin, footerY + 8);
         
-        // Data e página
         pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin - 40, footerY);
         pdf.text(`Página ${pageNumber}`, pageWidth - margin - 40, footerY + 4);
       };
 
-      // Função para adicionar nova página
       const addNewPage = () => {
         addFooter();
         pdf.addPage();
@@ -1154,7 +1217,6 @@ export default function InspecaoEletrica() {
         addHeader();
       };
 
-      // Função para verificar quebra de página
       const checkPageBreak = (requiredHeight: number) => {
         if (yPosition + requiredHeight > pageHeight - 40) {
           addNewPage();
@@ -1164,10 +1226,9 @@ export default function InspecaoEletrica() {
       // PÁGINA 1 - CAPA
       addHeader();
       
-      // Título principal (baseado nas imagens)
       pdf.setFontSize(24);
       pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 100, 200); // Azul
+      pdf.setTextColor(0, 100, 200);
       pdf.text('RELATÓRIO TÉCNICO DE INSPEÇÃO', pageWidth / 2, yPosition + 20, { align: 'center' });
       
       pdf.setFontSize(18);
@@ -1176,7 +1237,6 @@ export default function InspecaoEletrica() {
       
       yPosition += 60;
       
-      // Informações da inspeção em caixa
       pdf.setFillColor(245, 245, 245);
       pdf.rect(margin, yPosition, pageWidth - 2 * margin, 60, 'F');
       pdf.setDrawColor(0, 100, 200);
@@ -1203,45 +1263,33 @@ export default function InspecaoEletrica() {
       
       yPosition += 80;
       
-      // SUMÁRIO (baseado nas imagens)
-      pdf.setFontSize(16);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 100, 200);
-      pdf.text('SUMÁRIO', margin, yPosition);
-      yPosition += 15;
-      
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(0, 0, 0);
-      
-      const sumarioItems = [
-        '1. INTRODUÇÃO',
-        '2. OBJETIVO',
-        '3. NORMAS APLICÁVEIS',
-        '4. METODOLOGIA',
-        '5. CLASSIFICAÇÃO DOS RISCOS',
-        '6. RESULTADOS DA INSPEÇÃO',
-        '7. RECOMENDAÇÕES',
-        '8. CONCLUSÕES',
-        '9. ANEXOS'
-      ];
-      
-      sumarioItems.forEach((item, index) => {
-        pdf.text(item, margin + 10, yPosition + (index * 8));
-        // Linha pontilhada
-        const textWidth = pdf.getTextWidth(item);
-        const dotsStart = margin + 15 + textWidth;
-        const dotsEnd = pageWidth - margin - 20;
-        let dotPosition = dotsStart + 5;
+      // HRN TOTAL DO CLIENTE
+      if (currentInspecao.hrnTotalCliente && currentInspecao.hrnTotalCliente > 0) {
+        const hrnColor = getHRNColor(currentInspecao.hrnTotalCliente);
         
-        while (dotPosition < dotsEnd) {
-          pdf.text('.', dotPosition, yPosition + (index * 8));
-          dotPosition += 3;
-        }
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 100, 200);
+        pdf.text('HIERARQUIA DE RISCO NUMÉRICO (HRN)', margin, yPosition);
+        yPosition += 15;
         
-        pdf.text((index + 2).toString(), pageWidth - margin - 15, yPosition + (index * 8));
-      });
-      
+        pdf.setFillColor(245, 245, 245);
+        pdf.rect(margin, yPosition, pageWidth - 2 * margin, 30, 'F');
+        pdf.setDrawColor(200, 200, 200);
+        pdf.rect(margin, yPosition, pageWidth - 2 * margin, 30);
+        
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`HRN Total do Cliente: ${currentInspecao.hrnTotalCliente.toFixed(2)}`, margin + 5, yPosition + 10);
+        
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Classificação: ${hrnColor.label}`, margin + 5, yPosition + 20);
+        
+        yPosition += 40;
+      }
+
       addFooter();
       
       // NOVA PÁGINA - CONTEÚDO
@@ -1249,32 +1297,40 @@ export default function InspecaoEletrica() {
       pageNumber++;
       addHeader();
       
-      // Seção 6 - Resultados da Inspeção
       pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 100, 200);
       pdf.text('6. RESULTADOS DA INSPEÇÃO', margin, yPosition);
       yPosition += 15;
       
-      // Áreas e Itens
+      // Áreas e Itens com HRN
       currentInspecao.areas.forEach((area, areaIndex) => {
         checkPageBreak(30);
         
-        // Título da área
         pdf.setFontSize(14);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(0, 0, 0);
         const tipoArea = area.tipoChecklist === 'paineis' ? 'QUADROS ELÉTRICOS' : 'SUBESTAÇÕES';
         pdf.text(`6.${areaIndex + 1} ÁREA: ${area.nome.toUpperCase()} - ${tipoArea}`, margin, yPosition);
-        yPosition += 12;
+        yPosition += 8;
         
+        // HRN da Área
+        if (area.hrnTotal && area.hrnTotal > 0) {
+          const hrnColor = getHRNColor(area.hrnTotal);
+          pdf.setFontSize(10);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`HRN da Área: ${area.hrnTotal.toFixed(2)} - ${hrnColor.label}`, margin, yPosition);
+          yPosition += 6;
+        }
+        
+        yPosition += 6;
+
         if (area.tipoChecklist === 'paineis' && area.painelItems) {
-          // Tabela para painéis elétricos
+          // Tabela para painéis elétricos (sem HRN)
           const tableStartY = yPosition;
           const colWidths = [15, 25, 80, 15, 30, 30];
           const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'Observação', 'Recomendação'];
           
-          // Cabeçalho da tabela
           pdf.setFillColor(50, 50, 50);
           pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
           
@@ -1290,14 +1346,12 @@ export default function InspecaoEletrica() {
           
           yPosition += 8;
           
-          // Dados da tabela
           pdf.setFont('helvetica', 'normal');
           pdf.setTextColor(0, 0, 0);
           
           area.painelItems.forEach((item, itemIndex) => {
             checkPageBreak(12);
             
-            // Cor de fundo alternada
             if (itemIndex % 2 === 0) {
               pdf.setFillColor(248, 248, 248);
               pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
@@ -1318,7 +1372,6 @@ export default function InspecaoEletrica() {
               xPos += colWidths[i];
             });
             
-            // Bordas da tabela
             pdf.setDrawColor(200, 200, 200);
             xPos = margin;
             headers.forEach((_, i) => {
@@ -1329,12 +1382,11 @@ export default function InspecaoEletrica() {
             yPosition += 8;
           });
         } else {
-          // Tabela para subestações (75 itens NR-10)
+          // Tabela para subestações com HRN
           const tableStartY = yPosition;
-          const colWidths = [15, 25, 70, 15, 15, 15, 15, 15];
-          const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER'];
+          const colWidths = [15, 25, 60, 15, 15, 15, 15, 15, 20];
+          const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER', 'HRN'];
           
-          // Cabeçalho da tabela
           pdf.setFillColor(50, 50, 50);
           pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
           
@@ -1350,37 +1402,49 @@ export default function InspecaoEletrica() {
           
           yPosition += 8;
           
-          // Dados da tabela
           pdf.setFont('helvetica', 'normal');
           pdf.setTextColor(0, 0, 0);
           
           area.items.forEach((item, itemIndex) => {
             checkPageBreak(12);
             
-            // Cor de fundo alternada
             if (itemIndex % 2 === 0) {
               pdf.setFillColor(248, 248, 248);
               pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
             }
             
             xPos = margin;
+            const hrnValue = item.hrn || 0;
+            const hrnColor = getHRNColor(hrnValue);
+            
             const rowData = [
               item.id.toString(),
               item.norma,
-              item.descricao.length > 35 ? item.descricao.substring(0, 32) + '...' : item.descricao,
+              item.descricao.length > 30 ? item.descricao.substring(0, 27) + '...' : item.descricao,
               item.condicao || '-',
-              item.po || '-',
-              item.fe || '-',
-              item.gsd || '-',
-              item.nper || '-'
+              item.po ? item.po.split('-')[0] : '-',
+              item.fe ? item.fe.split('-')[0] : '-',
+              item.gsd ? item.gsd.split('-')[0] : '-',
+              item.nper ? item.nper.split('-')[0] : '-',
+              hrnValue > 0 ? hrnValue.toFixed(2) : '-'
             ];
             
             rowData.forEach((data, i) => {
+              // Destacar HRN com cor se for NC
+              if (i === 8 && item.condicao === 'NC' && hrnValue > 0) {
+                pdf.setFont('helvetica', 'bold');
+                if (hrnValue > 50) pdf.setTextColor(200, 0, 0); // Vermelho para alto risco
+                else if (hrnValue > 10) pdf.setTextColor(255, 140, 0); // Laranja para médio
+                else pdf.setTextColor(0, 150, 0); // Verde para baixo
+              } else {
+                pdf.setFont('helvetica', 'normal');
+                pdf.setTextColor(0, 0, 0);
+              }
+              
               pdf.text(data, xPos + 2, yPosition + 5);
               xPos += colWidths[i];
             });
             
-            // Bordas da tabela
             pdf.setDrawColor(200, 200, 200);
             xPos = margin;
             headers.forEach((_, i) => {
@@ -1390,7 +1454,6 @@ export default function InspecaoEletrica() {
             
             yPosition += 8;
             
-            // Recomendações se existir
             if (item.recomendacoes && item.recomendacoes.trim()) {
               checkPageBreak(8);
               pdf.setFontSize(7);
@@ -1408,7 +1471,6 @@ export default function InspecaoEletrica() {
         yPosition += 15;
       });
       
-      // Localização se disponível
       if (currentInspecao.localizacao) {
         checkPageBreak(20);
         pdf.setFontSize(12);
@@ -1432,19 +1494,15 @@ export default function InspecaoEletrica() {
       
       addFooter();
       
-      // Nome do arquivo
       const fileName = `RRTI-${currentInspecao.numeroSequencial}-${currentInspecao.nome.replace(/\s+/g, '-')}.pdf`;
       
-      // Salvar o PDF
       pdf.save(fileName);
       
-      // Mostrar mensagem de sucesso
-      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}\n\nEstrutura profissional aplicada conforme especificações:\n✓ Marca d'água PA Brasil\n✓ Logo do cliente\n✓ Cabeçalho e rodapé profissionais\n✓ Numeração de páginas\n✓ Sumário estruturado\n✓ Suporte para ambos os tipos de checklist`);
+      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}\n\n✓ Incluído sistema HRN com cores\n✓ HRN total por área e cliente\n✓ Classificação de riscos conforme análise\n✓ Estrutura profissional mantida`);
       
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
       
-      // Mensagem de erro mais específica baseada no tipo de erro
       let errorMessage = 'Erro ao gerar PDF. ';
       
       if (error instanceof Error) {
@@ -1536,7 +1594,6 @@ export default function InspecaoEletrica() {
       }
     }
 
-    // Marcar inspeção como concluída
     const updatedInspecao = {
       ...currentInspecao,
       status: 'Concluída' as const
@@ -1551,7 +1608,6 @@ export default function InspecaoEletrica() {
   };
 
   const salvarConfiguracoes = () => {
-    // Simular salvamento das configurações
     localStorage.setItem('configuracoes-sistema', JSON.stringify(configuracoes));
     alert('Configurações salvas com sucesso!');
   };
@@ -1599,7 +1655,7 @@ export default function InspecaoEletrica() {
     }
   };
 
-  // FUNÇÃO PARA OBTER DADOS DOS CLIENTES
+  // FUNÇÃO PARA OBTER DADOS DOS CLIENTES COM HRN
   const getClientesData = () => {
     const clientesMap = new Map();
 
@@ -1614,7 +1670,8 @@ export default function InspecaoEletrica() {
           inspecoesPendentes: 0,
           ultimaInspecao: null,
           numeroSequenciais: [],
-          conformidade: { total: 0, conformes: 0, naoConformes: 0, naoAplicaveis: 0 }
+          conformidade: { total: 0, conformes: 0, naoConformes: 0, naoAplicaveis: 0 },
+          hrnTotal: 0 // Novo campo para HRN total do cliente
         });
       }
 
@@ -1627,29 +1684,30 @@ export default function InspecaoEletrica() {
 
       clienteData.numeroSequenciais.push(inspecao.numeroSequencial);
 
-      // Atualizar última inspeção
       if (!clienteData.ultimaInspecao || new Date(inspecao.createdAt) > new Date(clienteData.ultimaInspecao)) {
         clienteData.ultimaInspecao = inspecao.createdAt;
       }
 
-      // Calcular conformidade
       const stats = getInspecaoStats(inspecao);
       clienteData.conformidade.total += stats.totalItems;
       clienteData.conformidade.conformes += stats.conformes;
       clienteData.conformidade.naoConformes += stats.naoConformes;
       clienteData.conformidade.naoAplicaveis += stats.naoAplicaveis;
+
+      // Somar HRN total do cliente
+      if (inspecao.hrnTotalCliente) {
+        clienteData.hrnTotal += inspecao.hrnTotalCliente;
+      }
     });
 
     return Array.from(clientesMap.values());
   };
 
-  // COMPONENTE DE CABEÇALHO PROFISSIONAL (BASEADO NO PDF)
+  // COMPONENTE DE CABEÇALHO PROFISSIONAL
   const ProfessionalHeader = ({ title, subtitle, showCompanyInfo = true }: { title: string; subtitle?: string; showCompanyInfo?: boolean }) => (
     <div className="bg-white border-l-4 border-orange-500 shadow-lg">
-      {/* Cabeçalho Principal */}
       <div className="bg-gradient-to-r from-blue-800 to-blue-900 text-white p-6">
         <div className="flex items-center justify-between">
-          {/* Logo e Nome da Empresa */}
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-white rounded-lg flex items-center justify-center p-2">
               <img 
@@ -1664,7 +1722,6 @@ export default function InspecaoEletrica() {
             </div>
           </div>
           
-          {/* Informações de Contato */}
           {showCompanyInfo && (
             <div className="text-right text-sm text-blue-200">
               <div className="flex items-center gap-2 justify-end mb-1">
@@ -1684,7 +1741,6 @@ export default function InspecaoEletrica() {
         </div>
       </div>
       
-      {/* Título do Documento */}
       <div className="bg-gray-50 px-6 py-4 border-b">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">{title}</h2>
@@ -1694,7 +1750,7 @@ export default function InspecaoEletrica() {
     </div>
   );
 
-  // COMPONENTE DE TABELA PROFISSIONAL (BASEADO NO PDF)
+  // COMPONENTE DE TABELA PROFISSIONAL
   const ProfessionalTable = ({ children, headers }: { children: React.ReactNode; headers: string[] }) => (
     <div className="bg-white shadow-lg rounded-lg overflow-hidden border">
       <table className="w-full">
@@ -1714,7 +1770,7 @@ export default function InspecaoEletrica() {
     </div>
   );
 
-  // COMPONENTE DE SEÇÃO NUMERADA (BASEADO NO PDF)
+  // COMPONENTE DE SEÇÃO NUMERADA
   const NumberedSection = ({ number, title, children }: { number: string; title: string; children: React.ReactNode }) => (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
       <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
@@ -1731,14 +1787,12 @@ export default function InspecaoEletrica() {
   if (currentView === 'selecionar-tipo-checklist') {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
           title="SELEÇÃO DO TIPO DE CHECKLIST" 
           subtitle={`Área: ${novaArea} - Escolha o Tipo de Inspeção`}
         />
 
         <div className="max-w-4xl mx-auto p-6">
-          {/* Botão de Navegação */}
           <div className="mb-6">
             <button
               onClick={() => setCurrentView('inspecao')}
@@ -1751,14 +1805,13 @@ export default function InspecaoEletrica() {
 
           <NumberedSection number="1" title="ESCOLHA O TIPO DE CHECKLIST">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Opção 1: Check List para Subestações */}
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
                 <div className="text-center mb-6">
                   <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-4">
                     <Building className="w-8 h-8" />
                   </div>
                   <h3 className="text-xl font-bold text-blue-900 mb-2">Check List para Subestações</h3>
-                  <p className="text-blue-700 text-sm">Inspeção completa baseada na NR-10</p>
+                  <p className="text-blue-700 text-sm">Inspeção completa baseada na NR-10 com sistema HRN</p>
                 </div>
 
                 <div className="space-y-3 mb-6">
@@ -1768,15 +1821,15 @@ export default function InspecaoEletrica() {
                   </div>
                   <div className="flex items-center gap-2 text-blue-800">
                     <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Subestações, Salas Elétricas, CCMs e QGBT</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-blue-800">
-                    <CheckCircle className="w-4 h-4" />
                     <span className="text-sm">Colunas: Condição, PO, FE, GSD, NPER</span>
                   </div>
                   <div className="flex items-center gap-2 text-blue-800">
                     <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Imagens padrão configuráveis</span>
+                    <span className="text-sm">Cálculo automático de HRN</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Classificação de riscos com cores</span>
                   </div>
                 </div>
 
@@ -1788,7 +1841,6 @@ export default function InspecaoEletrica() {
                 </button>
               </div>
 
-              {/* Opção 2: Checklist para Quadros Elétricos */}
               <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
                 <div className="text-center mb-6">
                   <div className="w-16 h-16 bg-green-600 text-white rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1805,15 +1857,15 @@ export default function InspecaoEletrica() {
                   </div>
                   <div className="flex items-center gap-2 text-green-800">
                     <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Quadros elétricos e painéis de comando</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-green-800">
-                    <CheckCircle className="w-4 h-4" />
                     <span className="text-sm">Colunas: Condição, Observação, Recomendação</span>
                   </div>
                   <div className="flex items-center gap-2 text-green-800">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm">Normas NBR 5410 e NR-10</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Foco em aspectos práticos</span>
                   </div>
                 </div>
 
@@ -1830,10 +1882,10 @@ export default function InspecaoEletrica() {
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
                 <div>
-                  <h5 className="font-medium text-yellow-900">Diferenças entre os Checklists</h5>
+                  <h5 className="font-medium text-yellow-900">Sistema HRN - Hierarquia de Risco Numérico</h5>
                   <div className="text-yellow-800 text-sm mt-2 space-y-1">
-                    <p><strong>Check List para Subestações:</strong> Focado na conformidade geral com a NR-10, ideal para instalações de grande porte.</p>
-                    <p><strong>Checklist para Quadros Elétricos:</strong> Específico para painéis e quadros, com foco em aspectos práticos de segurança e organização.</p>
+                    <p><strong>Check List para Subestações:</strong> Inclui cálculo automático de HRN quando Condição = NC, multiplicando os valores PO × FE × GSD × NPER.</p>
+                    <p><strong>Classificação de Riscos:</strong> Verde (Aceitável/Muito Baixo), Amarelo (Baixo/Significante), Vermelho (Alto/Muito Alto/Extremo/Inaceitável).</p>
                   </div>
                 </div>
               </div>
@@ -1844,18 +1896,16 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de gerenciamento de imagens
+  // Renderização da tela de gerenciamento de imagens (mantida igual)
   if (currentView === 'gerenciar-imagens') {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
           title="GERENCIAMENTO DE IMAGENS PADRÃO" 
           subtitle="Configuração das Imagens de Referência dos 75 Itens NR-10"
         />
 
         <div className="max-w-7xl mx-auto p-6">
-          {/* Botão de Navegação */}
           <div className="mb-6">
             <button
               onClick={() => setCurrentView('home')}
@@ -1866,7 +1916,6 @@ export default function InspecaoEletrica() {
             </button>
           </div>
 
-          {/* Seção de Seleção de Itens */}
           <NumberedSection number="1" title="SELEÇÃO DE ITENS PARA IMAGEM PADRÃO">
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
@@ -1908,7 +1957,6 @@ export default function InspecaoEletrica() {
                 </div>
               </div>
 
-              {/* Lista de Seleção de Itens */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {imagensPadrao.map((item) => (
                   <div key={item.id} className={`border rounded-lg p-4 cursor-pointer transition-all ${
@@ -1941,7 +1989,6 @@ export default function InspecaoEletrica() {
             </div>
           </NumberedSection>
 
-          {/* Controles de Busca e Filtro */}
           <NumberedSection number="2" title="CONTROLES DE BUSCA E FILTRO">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
@@ -1992,7 +2039,6 @@ export default function InspecaoEletrica() {
             </div>
           </NumberedSection>
 
-          {/* Lista de Imagens */}
           <NumberedSection number="3" title="IMAGENS PADRÃO DOS ITENS NR-10">
             <div className="space-y-4">
               {imagensFiltradas.map((item) => (
@@ -2000,7 +2046,6 @@ export default function InspecaoEletrica() {
                   item.precisaImagem ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
                 }`}>
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-                    {/* Informações do Item */}
                     <div className="lg:col-span-1 text-center">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mx-auto ${
                         item.precisaImagem ? 'bg-blue-600 text-white' : 'bg-gray-400 text-white'
@@ -2023,7 +2068,6 @@ export default function InspecaoEletrica() {
                       <p className="text-sm text-gray-700 line-clamp-2">{item.descricao}</p>
                     </div>
 
-                    {/* Imagem Atual */}
                     <div className="lg:col-span-2 text-center">
                       {item.precisaImagem ? (
                         <>
@@ -2043,7 +2087,6 @@ export default function InspecaoEletrica() {
                       )}
                     </div>
 
-                    {/* Controles de Edição */}
                     <div className="lg:col-span-3">
                       {item.precisaImagem ? (
                         editingImage === item.id ? (
@@ -2113,7 +2156,6 @@ export default function InspecaoEletrica() {
             )}
           </NumberedSection>
 
-          {/* Instruções */}
           <NumberedSection number="4" title="INSTRUÇÕES DE USO">
             <div className="prose max-w-none">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2157,20 +2199,18 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de dashboard com layout profissional
+  // Renderização da tela de dashboard com HRN
   if (currentView === 'dashboard') {
     const clientesData = getClientesData();
     
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
-          title="RELATÓRIO DE INSPEÇÕES ELÉTRICAS" 
-          subtitle="Dashboard Executivo - Análise de Conformidade NR-10"
+          title="DASHBOARD HRN - HIERARQUIA DE RISCO NUMÉRICO" 
+          subtitle="Análise de Conformidade NR-10 e Classificação de Riscos"
         />
 
         <div className="max-w-7xl mx-auto p-6">
-          {/* Botão de Navegação */}
           <div className="mb-6">
             <button
               onClick={() => setCurrentView('home')}
@@ -2181,7 +2221,6 @@ export default function InspecaoEletrica() {
             </button>
           </div>
 
-          {/* Seção 1 - Estatísticas Gerais */}
           <NumberedSection number="1" title="ESTATÍSTICAS GERAIS DO SISTEMA">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-lg">
@@ -2216,22 +2255,21 @@ export default function InspecaoEletrica() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 rounded-lg">
+              <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-6 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-purple-100 text-sm font-medium">CONCLUÍDAS</p>
+                    <p className="text-red-100 text-sm font-medium">HRN TOTAL SISTEMA</p>
                     <p className="text-3xl font-bold">
-                      {inspecoes.filter(i => i.status === 'Concluída').length}
+                      {clientesData.reduce((total, cliente) => total + cliente.hrnTotal, 0).toFixed(0)}
                     </p>
                   </div>
-                  <CheckCircle className="w-8 h-8 text-purple-200" />
+                  <AlertCircle className="w-8 h-8 text-red-200" />
                 </div>
               </div>
             </div>
           </NumberedSection>
 
-          {/* Seção 2 - Dados Detalhados por Cliente */}
-          <NumberedSection number="2" title="DADOS DETALHADOS POR CLIENTE">
+          <NumberedSection number="2" title="DADOS DETALHADOS POR CLIENTE COM HRN">
             {clientesData.length === 0 ? (
               <div className="text-center py-12">
                 <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -2239,11 +2277,13 @@ export default function InspecaoEletrica() {
                 <p className="text-gray-400">Crie uma inspeção para começar</p>
               </div>
             ) : (
-              <ProfessionalTable headers={['Cliente', 'Inspeções', 'Status', 'Conformidade', 'Última Inspeção', 'Números Sequenciais', 'Ações']}>
+              <ProfessionalTable headers={['Cliente', 'Inspeções', 'Status', 'Conformidade', 'HRN Total', 'Classificação', 'Última Inspeção', 'Ações']}>
                 {clientesData.map((cliente, index) => {
                   const conformidadePercentual = cliente.conformidade.total > 0 
                     ? Math.round((cliente.conformidade.conformes / cliente.conformidade.total) * 100)
                     : 0;
+
+                  const hrnColor = getHRNColor(cliente.hrnTotal);
 
                   return (
                     <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -2294,27 +2334,28 @@ export default function InspecaoEletrica() {
                           </div>
                         </div>
                       </td>
+
+                      <td className="px-4 py-4 text-center">
+                        <div className="text-2xl font-bold text-red-600">
+                          {cliente.hrnTotal.toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-500">Risco Acumulado</div>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div className={`px-3 py-2 rounded-full text-xs font-medium text-center ${hrnColor.bg} ${hrnColor.text}`}>
+                          {hrnColor.label}
+                        </div>
+                        <div className="text-xs text-gray-500 text-center mt-1">
+                          {cliente.hrnTotal > 0 ? `HRN: ${cliente.hrnTotal.toFixed(2)}` : 'Sem NC'}
+                        </div>
+                      </td>
                       
                       <td className="px-4 py-4 text-sm text-gray-600">
                         {cliente.ultimaInspecao 
                           ? new Date(cliente.ultimaInspecao).toLocaleDateString('pt-BR')
                           : 'N/A'
                         }
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {cliente.numeroSequenciais.slice(0, 2).map((numero, idx) => (
-                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-mono">
-                              {numero}
-                            </span>
-                          ))}
-                          {cliente.numeroSequenciais.length > 2 && (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                              +{cliente.numeroSequenciais.length - 2}
-                            </span>
-                          )}
-                        </div>
                       </td>
                       
                       <td className="px-4 py-4">
@@ -2334,33 +2375,71 @@ export default function InspecaoEletrica() {
             )}
           </NumberedSection>
 
-          {/* Seção 3 - Observações e Conclusões */}
-          <NumberedSection number="3" title="OBSERVAÇÕES E CONCLUSÕES">
+          <NumberedSection number="3" title="LEGENDA DE CLASSIFICAÇÃO HRN">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-green-100 border border-green-200 rounded-lg p-4">
+                <h4 className="font-semibold text-green-800 mb-2">ACEITÁVEL / MUITO BAIXO</h4>
+                <p className="text-sm text-green-700 mb-2">HRN: 0-1 / 1-5</p>
+                <p className="text-xs text-green-600">Manter medidas de proteção atuais</p>
+              </div>
+
+              <div className="bg-yellow-100 border border-yellow-200 rounded-lg p-4">
+                <h4 className="font-semibold text-yellow-800 mb-2">BAIXO / SIGNIFICANTE</h4>
+                <p className="text-sm text-yellow-700 mb-2">HRN: 5-10 / 10-50</p>
+                <p className="text-xs text-yellow-600">Garantir eficácia das medidas e aprimorar</p>
+              </div>
+
+              <div className="bg-red-100 border border-red-200 rounded-lg p-4">
+                <h4 className="font-semibold text-red-800 mb-2">ALTO / MUITO ALTO</h4>
+                <p className="text-sm text-red-700 mb-2">HRN: 50-100 / 100-500</p>
+                <p className="text-xs text-red-600">Reduzir ou eliminar risco, implementar proteções</p>
+              </div>
+
+              <div className="bg-red-200 border border-red-300 rounded-lg p-4">
+                <h4 className="font-semibold text-red-900 mb-2">EXTREMO / INACEITÁVEL</h4>
+                <p className="text-sm text-red-800 mb-2">HRN: 500-1000 / >1000</p>
+                <p className="text-xs text-red-700">Ação imediata, interromper atividades</p>
+              </div>
+            </div>
+          </NumberedSection>
+
+          <NumberedSection number="4" title="OBSERVAÇÕES E CONCLUSÕES HRN">
             <div className="prose max-w-none">
               <p className="text-gray-700 mb-4">
-                Este relatório apresenta um panorama completo das inspeções elétricas realizadas conforme a Norma Regulamentadora NR-10, 
-                demonstrando o comprometimento com a segurança em instalações elétricas.
+                Este dashboard apresenta a Hierarquia de Risco Numérico (HRN) calculada automaticamente para itens com condição "NC" 
+                (Não Conforme) através da multiplicação: PO × FE × GSD × NPER, conforme metodologia de análise de riscos.
               </p>
               
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">3.1 Escopo da Inspeção</h4>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">4.1 Metodologia HRN</h4>
               <ul className="list-disc pl-6 mb-4 text-gray-700">
-                <li>Verificação de conformidade com os 75 itens da NR-10 (Check List para Subestações)</li>
-                <li>Inspeção específica de Quadros Elétricos com 20 itens técnicos</li>
-                <li>Análise de condições de segurança das instalações elétricas</li>
-                <li>Documentação fotográfica e registro de não conformidades</li>
-                <li>Elaboração de relatórios técnicos detalhados</li>
+                <li><strong>PO (Probabilidade de Ocorrência):</strong> De 0,033 (Quase Impossível) a 15 (Certeza)</li>
+                <li><strong>FE (Frequência de Exposição):</strong> De 0,5 (Anualmente) a 5 (Constantemente)</li>
+                <li><strong>GSD (Gravidade dos Danos):</strong> De 0,1 (Escoriação) a 15 (Fatalidade)</li>
+                <li><strong>NPER (Número de Pessoas Expostas):</strong> De 1 (1-2 pessoas) a 12 (Mais de 50 pessoas)</li>
               </ul>
 
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">3.2 Metodologia Aplicada</h4>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">4.2 Aplicação Prática</h4>
               <p className="text-gray-700 mb-4">
-                As inspeções são realizadas por profissionais qualificados, seguindo rigorosamente os procedimentos estabelecidos 
-                pela NR-10 e normas técnicas aplicáveis (NBR 5410, NR-17), garantindo a identificação precisa de riscos e não conformidades.
+                O sistema calcula automaticamente o HRN apenas para itens marcados como "NC", permitindo priorização 
+                de ações corretivas baseada no nível de risco. Áreas e clientes com HRN mais alto requerem atenção imediata.
               </p>
+
+              <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
+                  <div>
+                    <h5 className="font-medium text-orange-900">Correlação com NR-28</h5>
+                    <p className="text-orange-800 text-sm mt-1">
+                      Os valores HRN podem ser correlacionados com os critérios da NR-28 para determinação de multas 
+                      e penalidades, considerando a gravidade das não conformidades identificadas.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </NumberedSection>
         </div>
 
-        {/* Rodapé Profissional */}
         <div className="bg-gray-800 text-white p-6 mt-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between">
@@ -2374,12 +2453,12 @@ export default function InspecaoEletrica() {
                 </div>
                 <div>
                   <p className="font-semibold">{configuracoes.empresa.nome}</p>
-                  <p className="text-gray-300 text-sm">Relatório gerado em {new Date().toLocaleDateString('pt-BR')}</p>
+                  <p className="text-gray-300 text-sm">Dashboard HRN gerado em {new Date().toLocaleDateString('pt-BR')}</p>
                 </div>
               </div>
               <div className="text-right text-sm text-gray-300">
-                <p>Sistema de Inspeção Elétrica NR-10</p>
-                <p>Versão 1.0 - {new Date().getFullYear()}</p>
+                <p>Sistema de Análise de Riscos NR-10</p>
+                <p>Hierarquia de Risco Numérico - Versão 1.0</p>
               </div>
             </div>
           </div>
@@ -2388,18 +2467,16 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de configurações com layout profissional
+  // Renderização da tela de configurações (mantida igual)
   if (currentView === 'configuracoes') {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
           title="CONFIGURAÇÕES DO SISTEMA" 
           subtitle="Personalização e Ajustes Técnicos"
         />
 
         <div className="max-w-7xl mx-auto p-6">
-          {/* Botão de Navegação */}
           <div className="mb-6 flex items-center justify-between">
             <button
               onClick={() => setCurrentView('home')}
@@ -2428,7 +2505,6 @@ export default function InspecaoEletrica() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Menu lateral */}
             <div className="lg:col-span-1">
               <div className="bg-white rounded-lg shadow-lg p-4">
                 <nav className="space-y-2">
@@ -2495,11 +2571,9 @@ export default function InspecaoEletrica() {
               </div>
             </div>
 
-            {/* Conteúdo das configurações */}
             <div className="lg:col-span-3">
               <div className="bg-white rounded-lg shadow-lg p-6">
                 
-                {/* Dados da Empresa */}
                 {activeConfigTab === 'empresa' && (
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900 mb-6">Dados da Empresa</h2>
@@ -2586,9 +2660,6 @@ export default function InspecaoEletrica() {
                     </div>
                   </div>
                 )}
-
-                {/* Outras seções de configuração permanecem iguais... */}
-                {/* (Mantendo o código original para as outras abas) */}
                 
               </div>
             </div>
@@ -2598,21 +2669,19 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de seleção de itens
+  // Renderização da tela de seleção de itens (mantida igual)
   if (currentView === 'selecionar-itens') {
     const itemsToShow = tipoChecklistSelecionado === 'subestacoes' ? checklistItems : painelEletricoItems;
     const tipoNome = tipoChecklistSelecionado === 'subestacoes' ? 'Check List para Subestações' : 'Checklist para Quadros Elétricos';
     
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
           title="SELEÇÃO DE ITENS PARA INSPEÇÃO" 
           subtitle={`Área: ${novaArea} - ${tipoNome}`}
         />
 
         <div className="max-w-7xl mx-auto p-6">
-          {/* Controles */}
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-4">
@@ -2661,7 +2730,7 @@ export default function InspecaoEletrica() {
                   <p className="text-blue-800 text-sm mt-1">
                     <strong>{tipoNome}</strong> - {itemsToShow.length} itens disponíveis para seleção.
                     {tipoChecklistSelecionado === 'subestacoes' 
-                      ? ' Focado na conformidade geral com a NR-10 para subestações, salas elétricas, CCMs e QGBT.'
+                      ? ' Focado na conformidade geral com a NR-10 para subestações, com cálculo automático de HRN.'
                       : ' Específico para quadros elétricos com base na NBR 5410 e NR-10.'
                     }
                   </p>
@@ -2670,7 +2739,6 @@ export default function InspecaoEletrica() {
             </div>
           </div>
 
-          {/* Tabela de Seleção */}
           <ProfessionalTable headers={['', 'Item', 'Norma', 'Descrição']}>
             {itemsToShow.map((item, index) => (
               <tr 
@@ -2707,18 +2775,16 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela inicial com layout profissional
+  // Renderização da tela inicial (mantida igual)
   if (currentView === 'home') {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
-          title="SISTEMA DE INSPEÇÃO ELÉTRICA NR-10" 
-          subtitle="Gestão Completa de Conformidade em Instalações Elétricas"
+          title="SISTEMA DE INSPEÇÃO ELÉTRICA NR-10 COM HRN" 
+          subtitle="Gestão Completa de Conformidade e Hierarquia de Risco Numérico"
         />
 
         <div className="max-w-7xl mx-auto p-6">
-          {/* Seção 1 - Menu Principal */}
           <NumberedSection number="1" title="MENU PRINCIPAL">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <button
@@ -2735,8 +2801,8 @@ export default function InspecaoEletrica() {
                 className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 <BarChart3 className="w-8 h-8 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold mb-2">Dashboard</h3>
-                <p className="text-sm opacity-90">Análises e relatórios</p>
+                <h3 className="text-lg font-semibold mb-2">Dashboard HRN</h3>
+                <p className="text-sm opacity-90">Análises e hierarquia de riscos</p>
               </button>
 
               <button 
@@ -2759,7 +2825,6 @@ export default function InspecaoEletrica() {
             </div>
           </NumberedSection>
 
-          {/* Seção 2 - Inspeções Recentes */}
           <NumberedSection number="2" title="INSPEÇÕES RECENTES">
             {inspecoes.length === 0 ? (
               <div className="text-center py-12">
@@ -2768,11 +2833,13 @@ export default function InspecaoEletrica() {
                 <p className="text-gray-400">Clique em "Nova Inspeção" para começar</p>
               </div>
             ) : (
-              <ProfessionalTable headers={['Inspeção', 'Contrato', 'Cliente', 'Engenheiro', 'Data', 'Status', 'Localização', 'Progresso', 'Ações']}>
+              <ProfessionalTable headers={['Inspeção', 'Contrato', 'Cliente', 'Engenheiro', 'Data', 'Status', 'HRN Total', 'Progresso', 'Ações']}>
                 {inspecoes.map(inspecao => {
                   const stats = getInspecaoStats(inspecao);
                   const progresso = stats.totalItems > 0 ? 
                     Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.totalItems) * 100) : 0;
+
+                  const hrnColor = getHRNColor(inspecao.hrnTotalCliente || 0);
 
                   return (
                     <tr key={inspecao.id} className="hover:bg-gray-50">
@@ -2811,18 +2878,19 @@ export default function InspecaoEletrica() {
                           {inspecao.status}
                         </span>
                       </td>
-                      
-                      <td className="px-4 py-4">
-                        {inspecao.localizacao ? (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="w-4 h-4 text-green-600" />
-                            <span className="text-xs text-green-700">GPS</span>
+
+                      <td className="px-4 py-4 text-center">
+                        {inspecao.hrnTotalCliente && inspecao.hrnTotalCliente > 0 ? (
+                          <div>
+                            <div className="text-lg font-bold text-red-600">
+                              {inspecao.hrnTotalCliente.toFixed(1)}
+                            </div>
+                            <div className={`px-2 py-1 rounded text-xs font-medium ${hrnColor.bg} ${hrnColor.text}`}>
+                              {hrnColor.label}
+                            </div>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="w-4 h-4 text-gray-400" />
-                            <span className="text-xs text-gray-500">N/A</span>
-                          </div>
+                          <div className="text-sm text-gray-500">Sem NC</div>
                         )}
                       </td>
                       
@@ -2870,7 +2938,6 @@ export default function InspecaoEletrica() {
           </NumberedSection>
         </div>
 
-        {/* Rodapé Profissional */}
         <div className="bg-gray-800 text-white p-6 mt-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between">
@@ -2884,12 +2951,12 @@ export default function InspecaoEletrica() {
                 </div>
                 <div>
                   <p className="font-semibold">{configuracoes.empresa.nome}</p>
-                  <p className="text-gray-300 text-sm">Sistema de Inspeção Elétrica NR-10</p>
+                  <p className="text-gray-300 text-sm">Sistema de Inspeção Elétrica NR-10 com HRN</p>
                 </div>
               </div>
               <div className="text-right text-sm text-gray-300">
-                <p>Versão 1.0 - {new Date().getFullYear()}</p>
-                <p>Desenvolvido para conformidade NR-10</p>
+                <p>Versão 2.0 - {new Date().getFullYear()}</p>
+                <p>Hierarquia de Risco Numérico Integrada</p>
               </div>
             </div>
           </div>
@@ -2898,18 +2965,16 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de nova inspeção com layout profissional
+  // Renderização da tela de nova inspeção (mantida igual)
   if (currentView === 'nova-inspecao') {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* Cabeçalho Profissional */}
         <ProfessionalHeader 
           title="NOVA INSPEÇÃO ELÉTRICA" 
           subtitle="Cadastro de Nova Inspeção - Formulário de Dados Iniciais"
         />
 
         <div className="max-w-4xl mx-auto p-6">
-          {/* Botão de Navegação */}
           <div className="mb-6">
             <button
               onClick={() => setCurrentView('home')}
@@ -3017,19 +3082,17 @@ export default function InspecaoEletrica() {
             </div>
           </NumberedSection>
 
-          {/* Componente de Geolocalização */}
           <GeolocationComponent />
         </div>
       </div>
     );
   }
 
-  // Renderização da tela de inspeção (mantém o layout original por ser funcional)
+  // Renderização da tela de inspeção (mantida igual)
   if (currentView === 'inspecao' && currentInspecao) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-7xl mx-auto">
-          {/* Header da Inspeção */}
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-center gap-4">
@@ -3053,6 +3116,12 @@ export default function InspecaoEletrica() {
                         GPS: {currentInspecao.localizacao.latitude.toFixed(4)}, {currentInspecao.localizacao.longitude.toFixed(4)}
                       </span>
                     )}
+                    {currentInspecao.hrnTotalCliente && currentInspecao.hrnTotalCliente > 0 && (
+                      <span className="flex items-center gap-1 text-red-600 font-bold">
+                        <AlertCircle className="w-4 h-4" />
+                        HRN Total: {currentInspecao.hrnTotalCliente.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3068,10 +3137,8 @@ export default function InspecaoEletrica() {
             </div>
           </div>
 
-          {/* Componente de Geolocalização na tela de inspeção */}
           <GeolocationComponent />
 
-          {/* Áreas */}
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Áreas de Inspeção</h2>
@@ -3141,6 +3208,7 @@ export default function InspecaoEletrica() {
                   Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.total) * 100) : 0;
 
                 const tipoArea = area.tipoChecklist === 'paineis' ? 'Quadros Elétricos' : 'Subestações';
+                const hrnColor = getHRNColor(area.hrnTotal || 0);
 
                 return (
                   <div key={area.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -3152,6 +3220,11 @@ export default function InspecaoEletrica() {
                         }`}>
                           {tipoArea}
                         </span>
+                        {area.hrnTotal && area.hrnTotal > 0 && (
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${hrnColor.bg} ${hrnColor.text}`}>
+                            HRN: {area.hrnTotal.toFixed(1)}
+                          </span>
+                        )}
                       </div>
                       <div>Total: {stats.total} itens</div>
                       <div className="flex gap-4 mt-1">
@@ -3199,7 +3272,7 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de checklist (atualizada para suportar ambos os tipos)
+  // Renderização da tela de checklist ATUALIZADA COM HRN
   if (currentView === 'checklist' && currentArea && currentInspecao) {
     const isPainelChecklist = currentArea.tipoChecklist === 'paineis';
     const tipoNome = isPainelChecklist ? 'Quadros Elétricos' : 'Check List para Subestações';
@@ -3222,11 +3295,15 @@ export default function InspecaoEletrica() {
                   </h1>
                   <p className="text-gray-600">
                     {tipoNome} com {isPainelChecklist ? currentArea.painelItems?.length || 0 : currentArea.items.length} itens de inspeção elétrica
+                    {!isPainelChecklist && currentArea.hrnTotal && currentArea.hrnTotal > 0 && (
+                      <span className="ml-4 text-red-600 font-bold">
+                        HRN da Área: {currentArea.hrnTotal.toFixed(2)} - {getHRNColor(currentArea.hrnTotal).label}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
               
-              {/* Botão de Concluir Inspeção */}
               <button
                 onClick={() => completeInspection(currentArea)}
                 disabled={!canCompleteInspection(currentArea)}
@@ -3243,16 +3320,13 @@ export default function InspecaoEletrica() {
           </div>
 
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            {/* Container com barra de rolagem no topo */}
             <div className="overflow-x-auto">
-              {/* Div invisível para forçar barra de rolagem no topo */}
               <div className="h-4 overflow-x-auto mb-2">
-                <div style={{ width: isPainelChecklist ? '1200px' : '1400px', height: '1px' }}></div>
+                <div style={{ width: isPainelChecklist ? '1200px' : '1600px', height: '1px' }}></div>
               </div>
               
-              {/* Tabela principal */}
               <div className="overflow-x-auto">
-                <table className={`w-full ${isPainelChecklist ? 'min-w-[1200px]' : 'min-w-[1400px]'}`}>
+                <table className={`w-full ${isPainelChecklist ? 'min-w-[1200px]' : 'min-w-[1600px]'}`}>
                   <thead className="bg-gray-800 text-white sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
@@ -3270,6 +3344,7 @@ export default function InspecaoEletrica() {
                           <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">FE</th>
                           <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">GSD</th>
                           <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">HRN</th>
                           <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendações</th>
                           <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Imagem Padrão</th>
                         </>
@@ -3279,7 +3354,6 @@ export default function InspecaoEletrica() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {isPainelChecklist && currentArea.painelItems ? (
-                      // Renderização para painéis elétricos
                       currentArea.painelItems.map((item, index) => (
                         <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -3292,7 +3366,6 @@ export default function InspecaoEletrica() {
                             {item.descricao}
                           </td>
                           
-                          {/* Condição */}
                           <td className="px-4 py-4 text-center">
                             <select
                               value={item.condicao}
@@ -3306,7 +3379,6 @@ export default function InspecaoEletrica() {
                             </select>
                           </td>
 
-                          {/* Observação */}
                           <td className="px-4 py-4">
                             <textarea
                               value={item.observacao}
@@ -3317,7 +3389,6 @@ export default function InspecaoEletrica() {
                             />
                           </td>
 
-                          {/* Recomendação */}
                           <td className="px-4 py-4">
                             <textarea
                               value={item.recomendacao}
@@ -3328,12 +3399,9 @@ export default function InspecaoEletrica() {
                             />
                           </td>
 
-                          {/* Mídia */}
                           <td className="px-4 py-4">
                             <div className="flex flex-col gap-2 min-w-[120px]">
-                              {/* Botões de mídia em linha horizontal */}
                               <div className="flex gap-1">
-                                {/* Upload Imagem */}
                                 <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
                                   <Upload className="w-3 h-3" />
                                   Img
@@ -3346,7 +3414,6 @@ export default function InspecaoEletrica() {
                                   />
                                 </label>
 
-                                {/* Upload Vídeo */}
                                 <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
                                   <Video className="w-3 h-3" />
                                   Vid
@@ -3359,7 +3426,6 @@ export default function InspecaoEletrica() {
                                   />
                                 </label>
 
-                                {/* Upload Áudio */}
                                 <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
                                   <Mic className="w-3 h-3" />
                                   Aud
@@ -3373,7 +3439,6 @@ export default function InspecaoEletrica() {
                                 </label>
                               </div>
 
-                              {/* Lista de mídias */}
                               {item.medias.length > 0 && (
                                 <div className="grid grid-cols-2 gap-1 mt-2">
                                   {item.medias.map((media) => (
@@ -3417,213 +3482,227 @@ export default function InspecaoEletrica() {
                         </tr>
                       ))
                     ) : (
-                      // Renderização para subestações (75 itens NR-10)
-                      currentArea.items.map((item, index) => (
-                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {item.id}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-900 font-medium">
-                            {item.norma}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
-                            {item.descricao}
-                          </td>
-                          
-                          {/* Condição */}
-                          <td className="px-4 py-4 text-center">
-                            <select
-                              value={item.condicao}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                            >
-                              <option value="">-</option>
-                              <option value="C">C</option>
-                              <option value="NC">NC</option>
-                              <option value="NA">NA</option>
-                            </select>
-                          </td>
+                      currentArea.items.map((item, index) => {
+                        const hrnValue = item.hrn || 0;
+                        const hrnColor = getHRNColor(hrnValue);
+                        
+                        return (
+                          <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {item.id}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-gray-900 font-medium">
+                              {item.norma}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
+                              {item.descricao}
+                            </td>
+                            
+                            <td className="px-4 py-4 text-center">
+                              <select
+                                value={item.condicao}
+                                onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                                className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                              >
+                                <option value="">-</option>
+                                <option value="C">C</option>
+                                <option value="NC">NC</option>
+                                <option value="NA">NA</option>
+                              </select>
+                            </td>
 
-                          {/* PO */}
-                          <td className="px-4 py-4 text-center">
-                            <select
-                              value={item.po}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.po)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                            >
-                              <option value="">-</option>
-                              <option value="C">C</option>
-                              <option value="NC">NC</option>
-                              <option value="NA">NA</option>
-                            </select>
-                          </td>
+                            <td className="px-4 py-4 text-center">
+                              <select
+                                value={item.po}
+                                onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value)}
+                                className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={item.condicao !== 'NC'}
+                              >
+                                {PO_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                          {/* FE */}
-                          <td className="px-4 py-4 text-center">
-                            <select
-                              value={item.fe}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.fe)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                            >
-                              <option value="">-</option>
-                              <option value="C">C</option>
-                              <option value="NC">NC</option>
-                              <option value="NA">NA</option>
-                            </select>
-                          </td>
+                            <td className="px-4 py-4 text-center">
+                              <select
+                                value={item.fe}
+                                onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value)}
+                                className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={item.condicao !== 'NC'}
+                              >
+                                {FE_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                          {/* GSD */}
-                          <td className="px-4 py-4 text-center">
-                            <select
-                              value={item.gsd}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.gsd)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                            >
-                              <option value="">-</option>
-                              <option value="C">C</option>
-                              <option value="NC">NC</option>
-                              <option value="NA">NA</option>
-                            </select>
-                          </td>
+                            <td className="px-4 py-4 text-center">
+                              <select
+                                value={item.gsd}
+                                onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value)}
+                                className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={item.condicao !== 'NC'}
+                              >
+                                {GSD_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                          {/* NPER */}
-                          <td className="px-4 py-4 text-center">
-                            <select
-                              value={item.nper}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.nper)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                            >
-                              <option value="">-</option>
-                              <option value="C">C</option>
-                              <option value="NC">NC</option>
-                              <option value="NA">NA</option>
-                            </select>
-                          </td>
+                            <td className="px-4 py-4 text-center">
+                              <select
+                                value={item.nper}
+                                onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value)}
+                                className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={item.condicao !== 'NC'}
+                              >
+                                {NPER_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                          {/* Recomendações */}
-                          <td className="px-4 py-4">
-                            <textarea
-                              value={item.recomendacoes}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'recomendacoes', e.target.value)}
-                              placeholder="Adicione recomendações técnicas..."
-                              className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                              rows={2}
-                            />
-                          </td>
-
-                          {/* Imagem Padrão */}
-                          <td className="px-4 py-4 text-center">
-                            <div className="flex flex-col items-center gap-2">
-                              {item.precisaImagem && item.imagemPadrao ? (
-                                <>
-                                  <img
-                                    src={item.imagemPadrao}
-                                    alt={`Referência para item ${item.id}`}
-                                    className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
-                                    onClick={() => window.open(item.imagemPadrao, '_blank')}
-                                    title="Clique para ver em tamanho maior"
-                                  />
-                                  <div className="flex items-center gap-1 text-xs text-blue-600">
-                                    <Image className="w-3 h-3" />
-                                    <span>Ref.</span>
+                            <td className="px-4 py-4 text-center">
+                              {item.condicao === 'NC' && hrnValue > 0 ? (
+                                <div className={`px-3 py-2 rounded-lg text-sm font-bold ${hrnColor.bg} ${hrnColor.text}`}>
+                                  {hrnValue.toFixed(2)}
+                                  <div className="text-xs font-normal mt-1">
+                                    {hrnColor.label}
                                   </div>
-                                </>
+                                </div>
                               ) : (
-                                <div className="w-16 h-12 bg-gray-100 rounded border flex items-center justify-center">
-                                  <Image className="w-4 h-4 text-gray-400" />
+                                <div className="text-sm text-gray-400">
+                                  {item.condicao === 'NC' ? 'Preencha todos os campos' : '-'}
                                 </div>
                               )}
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Mídia */}
-                          <td className="px-4 py-4">
-                            <div className="flex flex-col gap-2 min-w-[120px]">
-                              {/* Botões de mídia em linha horizontal */}
-                              <div className="flex gap-1">
-                                {/* Upload Imagem */}
-                                <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
-                                  <Upload className="w-3 h-3" />
-                                  Img
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'image')}
-                                    className="hidden"
-                                  />
-                                </label>
+                            <td className="px-4 py-4">
+                              <textarea
+                                value={item.recomendacoes}
+                                onChange={(e) => updateItem(currentArea.id, item.id, 'recomendacoes', e.target.value)}
+                                placeholder="Adicione recomendações técnicas..."
+                                className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                rows={2}
+                              />
+                            </td>
 
-                                {/* Upload Vídeo */}
-                                <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
-                                  <Video className="w-3 h-3" />
-                                  Vid
-                                  <input
-                                    type="file"
-                                    accept="video/*"
-                                    multiple
-                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'video')}
-                                    className="hidden"
-                                  />
-                                </label>
-
-                                {/* Upload Áudio */}
-                                <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
-                                  <Mic className="w-3 h-3" />
-                                  Aud
-                                  <input
-                                    type="file"
-                                    accept="audio/*"
-                                    multiple
-                                    onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'audio')}
-                                    className="hidden"
-                                  />
-                                </label>
-                              </div>
-
-                              {/* Lista de mídias */}
-                              {item.medias.length > 0 && (
-                                <div className="grid grid-cols-2 gap-1 mt-2">
-                                  {item.medias.map((media) => (
-                                    <div key={media.id} className="relative group">
-                                      {media.type === 'image' && (
-                                        <img
-                                          src={media.url}
-                                          alt={media.name}
-                                          className="w-full h-16 object-cover rounded border cursor-pointer"
-                                          onClick={() => setSelectedMedia(media)}
-                                        />
-                                      )}
-                                      {media.type === 'video' && (
-                                        <div
-                                          className="w-full h-16 bg-purple-100 rounded border flex items-center justify-center cursor-pointer"
-                                          onClick={() => setSelectedMedia(media)}
-                                        >
-                                          <Video className="w-6 h-6 text-purple-600" />
-                                        </div>
-                                      )}
-                                      {media.type === 'audio' && (
-                                        <div
-                                          className="w-full h-16 bg-orange-100 rounded border flex items-center justify-center cursor-pointer"
-                                          onClick={() => setSelectedMedia(media)}
-                                        >
-                                          <Mic className="w-6 h-6 text-orange-600" />
-                                        </div>
-                                      )}
-                                      <button
-                                        onClick={() => removeMedia(currentArea.id, item.id, media.id)}
-                                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
+                            <td className="px-4 py-4 text-center">
+                              <div className="flex flex-col items-center gap-2">
+                                {item.precisaImagem && item.imagemPadrao ? (
+                                  <>
+                                    <img
+                                      src={item.imagemPadrao}
+                                      alt={`Referência para item ${item.id}`}
+                                      className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity"
+                                      onClick={() => window.open(item.imagemPadrao, '_blank')}
+                                      title="Clique para ver em tamanho maior"
+                                    />
+                                    <div className="flex items-center gap-1 text-xs text-blue-600">
+                                      <Image className="w-3 h-3" />
+                                      <span>Ref.</span>
                                     </div>
-                                  ))}
+                                  </>
+                                ) : (
+                                  <div className="w-16 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                                    <Image className="w-4 h-4 text-gray-400" />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div className="flex flex-col gap-2 min-w-[120px]">
+                                <div className="flex gap-1">
+                                  <label className="flex items-center gap-1 bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors cursor-pointer">
+                                    <Upload className="w-3 h-3" />
+                                    Img
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'image')}
+                                      className="hidden"
+                                    />
+                                  </label>
+
+                                  <label className="flex items-center gap-1 bg-purple-600 text-white px-2 py-1 rounded text-xs hover:bg-purple-700 transition-colors cursor-pointer">
+                                    <Video className="w-3 h-3" />
+                                    Vid
+                                    <input
+                                      type="file"
+                                      accept="video/*"
+                                      multiple
+                                      onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'video')}
+                                      className="hidden"
+                                    />
+                                  </label>
+
+                                  <label className="flex items-center gap-1 bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700 transition-colors cursor-pointer">
+                                    <Mic className="w-3 h-3" />
+                                    Aud
+                                    <input
+                                      type="file"
+                                      accept="audio/*"
+                                      multiple
+                                      onChange={(e) => handleFileUpload(currentArea.id, item.id, e.target.files, 'audio')}
+                                      className="hidden"
+                                    />
+                                  </label>
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+
+                                {item.medias.length > 0 && (
+                                  <div className="grid grid-cols-2 gap-1 mt-2">
+                                    {item.medias.map((media) => (
+                                      <div key={media.id} className="relative group">
+                                        {media.type === 'image' && (
+                                          <img
+                                            src={media.url}
+                                            alt={media.name}
+                                            className="w-full h-16 object-cover rounded border cursor-pointer"
+                                            onClick={() => setSelectedMedia(media)}
+                                          />
+                                        )}
+                                        {media.type === 'video' && (
+                                          <div
+                                            className="w-full h-16 bg-purple-100 rounded border flex items-center justify-center cursor-pointer"
+                                            onClick={() => setSelectedMedia(media)}
+                                          >
+                                            <Video className="w-6 h-6 text-purple-600" />
+                                          </div>
+                                        )}
+                                        {media.type === 'audio' && (
+                                          <div
+                                            className="w-full h-16 bg-orange-100 rounded border flex items-center justify-center cursor-pointer"
+                                            onClick={() => setSelectedMedia(media)}
+                                          >
+                                            <Mic className="w-6 h-6 text-orange-600" />
+                                          </div>
+                                        )}
+                                        <button
+                                          onClick={() => removeMedia(currentArea.id, item.id, media.id)}
+                                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
