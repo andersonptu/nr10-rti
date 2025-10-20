@@ -23,19 +23,18 @@ interface ChecklistItem {
   norma: string;
   descricao: string;
   condicao: 'C' | 'NC' | 'NA' | '';
-  po: string; // Agora string para valores numéricos com descrição
-  fe: string; // Agora string para valores numéricos com descrição
-  gsd: string; // Agora string para valores numéricos com descrição
-  nper: string; // Agora string para valores numéricos com descrição
+  po: string;
+  fe: string;
+  gsd: string;
+  nper: string;
   recomendacoes: string;
   imagemPadrao: string;
   medias: MediaFile[];
   selected: boolean;
   precisaImagem: boolean;
-  hrn?: number; // Novo campo para armazenar o valor HRN calculado
+  hrn?: number;
 }
 
-// Nova interface para itens de painéis elétricos
 interface PainelEletricoItem {
   id: number;
   norma: string;
@@ -53,7 +52,7 @@ interface Area {
   items: ChecklistItem[];
   painelItems?: PainelEletricoItem[];
   tipoChecklist: 'subestacoes' | 'paineis';
-  hrnTotal?: number; // Novo campo para HRN total da área
+  hrnTotal?: number;
 }
 
 interface Localizacao {
@@ -77,7 +76,7 @@ interface Inspecao {
   createdAt: string;
   localizacao?: Localizacao;
   logoCliente?: string;
-  hrnTotalCliente?: number; // Novo campo para HRN total do cliente
+  hrnTotalCliente?: number;
 }
 
 interface ConfiguracaoSistema {
@@ -118,7 +117,6 @@ interface ConfiguracaoSistema {
   };
 }
 
-// Estado global para armazenar as imagens padrão dos itens
 interface ImagemPadraoItem {
   id: number;
   norma: string;
@@ -128,12 +126,11 @@ interface ImagemPadraoItem {
   precisaImagem: boolean;
 }
 
-// Configuração global de quais itens precisam de imagem padrão
 interface ConfiguracaoImagensPadrao {
   itensSelecionados: number[];
 }
 
-// CONSTANTES PARA OS NOVOS VALORES NUMÉRICOS COM DESCRIÇÕES
+// CONSTANTES PARA OS VALORES NUMÉRICOS COM DESCRIÇÕES
 const PO_OPTIONS = [
   { value: '', label: 'Selecione...' },
   { value: '0.033', label: '0,033 - Quase Impossível' },
@@ -188,7 +185,7 @@ const calcularHRN = (po: string, fe: string, gsd: string, nper: string): number 
   return poValue * feValue * gsdValue * nperValue;
 };
 
-// FUNÇÃO PARA OBTER COR DO HRN BASEADA NA IMAGEM ANALISADA
+// FUNÇÃO PARA OBTER COR DO HRN
 const getHRNColor = (hrn: number): { bg: string; text: string; label: string } => {
   if (hrn >= 0 && hrn <= 1) return { bg: 'bg-green-100', text: 'text-green-800', label: 'Aceitável' };
   if (hrn > 1 && hrn <= 5) return { bg: 'bg-green-200', text: 'text-green-900', label: 'Muito Baixo' };
@@ -279,7 +276,6 @@ const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'np
   { id: 75, norma: "NR10.15.4", descricao: "São considerados autorizados os trabalhadores qualificados ou capacitados com anuência formal da empresa?" }
 ];
 
-// Novos itens para painéis elétricos
 const painelEletricoItems: Omit<PainelEletricoItem, 'condicao' | 'observacao' | 'recomendacao' | 'medias' | 'selected'>[] = [
   { id: 1, norma: "NBR 5410", descricao: "O painel está identificado: Possui TAG, Etiqueta com nível de tensão, Advertência quanto aos riscos elétricos." },
   { id: 2, norma: "NBR 5410", descricao: "O painel possui chave para bloqueio elétrico?" },
@@ -438,79 +434,20 @@ export default function InspecaoEletrica() {
     return 'Geral';
   };
 
-  // Função para atualizar imagem padrão
-  const updateImagemPadrao = (itemId: number, novaUrl: string) => {
-    setImagensPadrao(prev => prev.map(item => 
-      item.id === itemId ? { ...item, imagemPadrao: novaUrl } : item
-    ));
+  // FUNÇÃO PARA GERAR NÚMERO SEQUENCIAL
+  const generateSequentialNumber = (responsavelCliente: string): string => {
+    const currentYear = new Date().getFullYear();
     
-    // Atualizar também nas inspeções existentes
-    setInspecoes(prev => prev.map(inspecao => ({
-      ...inspecao,
-      areas: inspecao.areas.map(area => ({
-        ...area,
-        items: area.items.map(item => 
-          item.id === itemId ? { ...item, imagemPadrao: novaUrl } : item
-        )
-      }))
-    })));
-
-    setEditingImage(null);
-    setNewImageUrl('');
-    alert('Imagem padrão atualizada com sucesso!');
-  };
-
-  // Função para alternar seleção de item para imagem padrão
-  const toggleItemImagemPadrao = (itemId: number) => {
-    const isCurrentlySelected = configuracaoImagensPadrao.itensSelecionados.includes(itemId);
+    const clienteInspecoes = inspecoes.filter(inspecao => {
+      const inspecaoYear = new Date(inspecao.createdAt).getFullYear();
+      return inspecao.responsavelCliente === responsavelCliente && inspecaoYear === currentYear;
+    });
     
-    setImagensPadrao(prev => prev.map(item => 
-      item.id === itemId ? { ...item, precisaImagem: !isCurrentlySelected } : item
-    ));
-
-    setConfiguracaoImagensPadrao(prev => ({
-      ...prev,
-      itensSelecionados: isCurrentlySelected
-        ? prev.itensSelecionados.filter(id => id !== itemId)
-        : [...prev.itensSelecionados, itemId]
-    }));
+    const nextNumber = clienteInspecoes.length + 1;
+    const sequentialNumber = nextNumber.toString().padStart(4, '0');
+    
+    return `PA-${currentYear}-${sequentialNumber}`;
   };
-
-  // Função para selecionar/deselecionar todos os itens para imagem padrão
-  const toggleAllItemsImagemPadrao = () => {
-    const todosIds = imagensPadrao.map(item => item.id);
-    const todosSelecionados = configuracaoImagensPadrao.itensSelecionados.length === todosIds.length;
-
-    if (todosSelecionados) {
-      setImagensPadrao(prev => prev.map(item => ({ ...item, precisaImagem: false })));
-      setConfiguracaoImagensPadrao(prev => ({ ...prev, itensSelecionados: [] }));
-    } else {
-      setImagensPadrao(prev => prev.map(item => ({ ...item, precisaImagem: true })));
-      setConfiguracaoImagensPadrao(prev => ({ ...prev, itensSelecionados: todosIds }));
-    }
-  };
-
-  // Função para salvar configuração de imagens padrão
-  const salvarConfiguracaoImagensPadrao = () => {
-    try {
-      localStorage.setItem('configuracao-imagens-padrao', JSON.stringify(configuracaoImagensPadrao));
-      alert(`Configuração salva com sucesso!\n${configuracaoImagensPadrao.itensSelecionados.length} itens selecionados para receber imagem padrão em novas inspeções.`);
-    } catch (error) {
-      console.error('Erro ao salvar configuração:', error);
-      alert('Erro ao salvar configuração. Tente novamente.');
-    }
-  };
-
-  // Filtrar imagens baseado na busca e categoria
-  const imagensFiltradas = imagensPadrao.filter(item => {
-    const matchSearch = item.norma.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       item.descricao.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCategory = selectedCategory === 'todas' || item.categoria === selectedCategory;
-    return matchSearch && matchCategory;
-  });
-
-  // Obter categorias únicas
-  const categorias = ['todas', ...Array.from(new Set(imagensPadrao.map(item => item.categoria)))];
 
   // FUNÇÃO PARA OBTER GEOLOCALIZAÇÃO
   const obterLocalizacao = async () => {
@@ -543,22 +480,6 @@ export default function InspecaoEletrica() {
         timestamp: new Date().toISOString()
       };
 
-      // Tentar obter endereço usando reverse geocoding
-      try {
-        const response = await fetch(
-          `https://api.opencagedata.com/geocode/v1/json?q=${position.coords.latitude}+${position.coords.longitude}&key=YOUR_API_KEY&language=pt&pretty=1`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.results && data.results.length > 0) {
-            novaLocalizacao.endereco = data.results[0].formatted;
-          }
-        }
-      } catch (geocodeError) {
-        console.log('Não foi possível obter o endereço, mas a localização foi capturada');
-      }
-
       setLocalizacao(novaLocalizacao);
       
       if (currentInspecao) {
@@ -585,118 +506,6 @@ export default function InspecaoEletrica() {
     } finally {
       setLoadingLocation(false);
     }
-  };
-
-  // COMPONENTE DE GEOLOCALIZAÇÃO
-  const GeolocationComponent = () => (
-    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Navigation className="w-6 h-6 text-blue-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Localização do Cliente</h3>
-        </div>
-        <button
-          onClick={obterLocalizacao}
-          disabled={loadingLocation}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-            loadingLocation 
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {loadingLocation ? (
-            <>
-              <Loader className="w-4 h-4 animate-spin" />
-              Obtendo...
-            </>
-          ) : (
-            <>
-              <MapPin className="w-4 h-4" />
-              Capturar Localização
-            </>
-          )}
-        </button>
-      </div>
-
-      {locationError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <p className="text-red-800 text-sm">{locationError}</p>
-          </div>
-        </div>
-      )}
-
-      {localizacao && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <h4 className="font-medium text-green-800 mb-2">Coordenadas GPS</h4>
-              <div className="text-sm text-green-700 space-y-1">
-                <p><span className="font-medium">Latitude:</span> {localizacao.latitude.toFixed(6)}</p>
-                <p><span className="font-medium">Longitude:</span> {localizacao.longitude.toFixed(6)}</p>
-                {localizacao.precisao && (
-                  <p><span className="font-medium">Precisão:</span> ±{Math.round(localizacao.precisao)}m</p>
-                )}
-                <p><span className="font-medium">Capturado em:</span> {new Date(localizacao.timestamp).toLocaleString('pt-BR')}</p>
-              </div>
-            </div>
-            
-            {localizacao.endereco && (
-              <div>
-                <h4 className="font-medium text-green-800 mb-2">Endereço</h4>
-                <p className="text-sm text-green-700">{localizacao.endereco}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 flex gap-2">
-            <a
-              href={`https://www.google.com/maps?q=${localizacao.latitude},${localizacao.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
-            >
-              <Globe className="w-4 h-4" />
-              Ver no Google Maps
-            </a>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`${localizacao.latitude}, ${localizacao.longitude}`);
-                alert('Coordenadas copiadas para a área de transferência!');
-              }}
-              className="flex items-center gap-2 bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-700 transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              Copiar Coordenadas
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!localizacao && !locationError && !loadingLocation && (
-        <div className="text-center py-8">
-          <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-500">Clique em "Capturar Localização" para registrar a posição atual</p>
-          <p className="text-gray-400 text-sm mt-1">A localização será anexada à inspeção para referência</p>
-        </div>
-      )}
-    </div>
-  );
-
-  // FUNÇÃO PARA GERAR NÚMERO SEQUENCIAL
-  const generateSequentialNumber = (responsavelCliente: string): string => {
-    const currentYear = new Date().getFullYear();
-    
-    const clienteInspecoes = inspecoes.filter(inspecao => {
-      const inspecaoYear = new Date(inspecao.createdAt).getFullYear();
-      return inspecao.responsavelCliente === responsavelCliente && inspecaoYear === currentYear;
-    });
-    
-    const nextNumber = clienteInspecoes.length + 1;
-    const sequentialNumber = nextNumber.toString().padStart(4, '0');
-    
-    return `PA-${currentYear}-${sequentialNumber}`;
   };
 
   const createNewInspecao = () => {
@@ -805,7 +614,7 @@ export default function InspecaoEletrica() {
             id: item.id,
             norma: item.norma,
             descricao: item.descricao,
-            condicao: '',
+            condicao: '' as const,
             po: '',
             fe: '',
             gsd: '',
@@ -847,7 +656,7 @@ export default function InspecaoEletrica() {
           id: item.id,
           norma: item.norma,
           descricao: item.descricao,
-          condicao: '',
+          condicao: '' as const,
           observacao: '',
           recomendacao: '',
           medias: [],
@@ -888,7 +697,7 @@ export default function InspecaoEletrica() {
         id: item.id,
         norma: item.norma,
         descricao: item.descricao,
-        condicao: '',
+        condicao: '' as const,
         po: '',
         fe: '',
         gsd: '',
@@ -1030,501 +839,12 @@ export default function InspecaoEletrica() {
     }
   };
 
-  const openCamera = async (itemId: number) => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      streamRef.current = stream;
-      setCameraOpen({ itemId });
-      
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }, 100);
-    } catch (error) {
-      console.error('Erro ao acessar câmera:', error);
-      alert('Não foi possível acessar a câmera');
-    }
-  };
-
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current || !cameraOpen || !currentArea) return;
-
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const context = canvas.getContext('2d');
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context?.drawImage(video, 0, 0);
-
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const mediaFile: MediaFile = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          file,
-          type: 'image',
-          url: URL.createObjectURL(file),
-          name: file.name,
-          size: file.size
-        };
-
-        if (currentArea.tipoChecklist === 'paineis') {
-          updatePainelItem(currentArea.id, cameraOpen.itemId, 'medias', 
-            currentArea.painelItems?.find(i => i.id === cameraOpen.itemId)?.medias.concat(mediaFile) || [mediaFile]
-          );
-        } else {
-          updateItem(currentArea.id, cameraOpen.itemId, 'medias', 
-            currentArea.items.find(i => i.id === cameraOpen.itemId)?.medias.concat(mediaFile) || [mediaFile]
-          );
-        }
-      }
-    }, 'image/jpeg', 0.8);
-
-    closeCamera();
-  };
-
-  const closeCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setCameraOpen(null);
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'C': return 'bg-green-100 text-green-800';
       case 'NC': return 'bg-red-100 text-red-800';
       case 'NA': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  // FUNÇÃO PARA GERAR PDF (mantida igual)
-  const generatePDF = async () => {
-    if (!currentInspecao) return;
-    
-    try {
-      let jsPDF = (window as any).jsPDF;
-      
-      if (!jsPDF) {
-        console.log('Carregando jsPDF via CDN...');
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-        script.crossOrigin = 'anonymous';
-        document.head.appendChild(script);
-        
-        await new Promise((resolve, reject) => {
-          script.onload = () => {
-            jsPDF = (window as any).jsPDF;
-            resolve(jsPDF);
-          };
-          script.onerror = () => reject(new Error('Falha ao carregar jsPDF via CDN'));
-          setTimeout(() => reject(new Error('Timeout ao carregar jsPDF')), 10000);
-        });
-      }
-      
-      if (!jsPDF) {
-        throw new Error('jsPDF não está disponível');
-      }
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 20;
-      let yPosition = margin;
-      let pageNumber = 1;
-      
-      const addWatermark = () => {
-        if (configuracoes.relatorios.marcaDagua && configuracoes.empresa.marcaDagua) {
-          pdf.setGState(new pdf.GState({ opacity: 0.1 }));
-          pdf.setFontSize(60);
-          pdf.setTextColor(200, 200, 200);
-          pdf.text('PA BRASIL', pageWidth / 2, pageHeight / 2, { 
-            align: 'center', 
-            angle: 45 
-          });
-          pdf.text('AUTOMAÇÃO', pageWidth / 2, (pageHeight / 2) + 20, { 
-            align: 'center', 
-            angle: 45 
-          });
-          pdf.setGState(new pdf.GState({ opacity: 1 }));
-        }
-      };
-
-      const addHeader = () => {
-        addWatermark();
-        
-        pdf.setFillColor(255, 140, 0);
-        pdf.rect(0, 0, 8, pageHeight, 'F');
-        
-        try {
-          pdf.setFillColor(255, 255, 255);
-          pdf.rect(margin, margin, 30, 20, 'F');
-          pdf.setFontSize(8);
-          pdf.setTextColor(0, 0, 0);
-          pdf.text('PA BRASIL', margin + 2, margin + 8);
-          pdf.text('AUTOMAÇÃO', margin + 2, margin + 12);
-        } catch (error) {
-          console.log('Erro ao adicionar logo PA Brasil');
-        }
-
-        if (currentInspecao.logoCliente) {
-          try {
-            pdf.setFillColor(240, 240, 240);
-            pdf.rect(pageWidth - margin - 30, margin, 30, 20, 'F');
-            pdf.setFontSize(8);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text('LOGO CLIENTE', pageWidth - margin - 28, margin + 12);
-          } catch (error) {
-            console.log('Erro ao adicionar logo do cliente');
-          }
-        }
-
-        pdf.setFillColor(240, 240, 240);
-        pdf.rect(pageWidth - margin - 60, margin + 25, 60, 25, 'F');
-        pdf.setFontSize(8);
-        pdf.setTextColor(0, 0, 0);
-        pdf.text('RELATÓRIO TÉCNICO DE INSPEÇÃO', pageWidth - margin - 58, margin + 30);
-        pdf.text(`RRTI-${new Date().getFullYear()}-${currentInspecao.numeroSequencial}`, pageWidth - margin - 58, margin + 35);
-        pdf.text('REVISÃO: 001', pageWidth - margin - 58, margin + 40);
-        pdf.text(`FOLHA: Página ${pageNumber}`, pageWidth - margin - 58, margin + 45);
-        
-        yPosition = margin + 60;
-      };
-
-      const addFooter = () => {
-        const footerY = pageHeight - 20;
-        
-        pdf.setDrawColor(200, 200, 200);
-        pdf.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
-        
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text(configuracoes.empresa.nome, margin, footerY);
-        pdf.text(`${configuracoes.empresa.telefone} | ${configuracoes.empresa.email}`, margin, footerY + 4);
-        pdf.text(configuracoes.empresa.endereco, margin, footerY + 8);
-        
-        pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin - 40, footerY);
-        pdf.text(`Página ${pageNumber}`, pageWidth - margin - 40, footerY + 4);
-      };
-
-      const addNewPage = () => {
-        addFooter();
-        pdf.addPage();
-        pageNumber++;
-        yPosition = margin;
-        addHeader();
-      };
-
-      const checkPageBreak = (requiredHeight: number) => {
-        if (yPosition + requiredHeight > pageHeight - 40) {
-          addNewPage();
-        }
-      };
-
-      // PÁGINA 1 - CAPA
-      addHeader();
-      
-      pdf.setFontSize(24);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 100, 200);
-      pdf.text('RELATÓRIO TÉCNICO DE INSPEÇÃO', pageWidth / 2, yPosition + 20, { align: 'center' });
-      
-      pdf.setFontSize(18);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text('INSTALAÇÕES ELÉTRICAS - NR-10', pageWidth / 2, yPosition + 35, { align: 'center' });
-      
-      yPosition += 60;
-      
-      pdf.setFillColor(245, 245, 245);
-      pdf.rect(margin, yPosition, pageWidth - 2 * margin, 60, 'F');
-      pdf.setDrawColor(0, 100, 200);
-      pdf.rect(margin, yPosition, pageWidth - 2 * margin, 60);
-      
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('DADOS DA INSPEÇÃO', margin + 5, yPosition + 10);
-      
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      const infoLines = [
-        `Cliente: ${currentInspecao.nome}`,
-        `Contrato: ${currentInspecao.numeroContrato}`,
-        `Engenheiro Responsável: ${currentInspecao.engenheiroResponsavel}`,
-        `Responsável do Cliente: ${currentInspecao.responsavelCliente}`,
-        `Data da Inspeção: ${new Date(currentInspecao.data).toLocaleDateString('pt-BR')}`,
-        `Número Sequencial: ${currentInspecao.numeroSequencial}`
-      ];
-      
-      infoLines.forEach((line, index) => {
-        pdf.text(line, margin + 5, yPosition + 20 + (index * 6));
-      });
-      
-      yPosition += 80;
-      
-      // HRN TOTAL DO CLIENTE
-      if (currentInspecao.hrnTotalCliente && currentInspecao.hrnTotalCliente > 0) {
-        const hrnColor = getHRNColor(currentInspecao.hrnTotalCliente);
-        
-        pdf.setFontSize(16);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 100, 200);
-        pdf.text('HIERARQUIA DE RISCO NUMÉRICO (HRN)', margin, yPosition);
-        yPosition += 15;
-        
-        pdf.setFillColor(245, 245, 245);
-        pdf.rect(margin, yPosition, pageWidth - 2 * margin, 30, 'F');
-        pdf.setDrawColor(200, 200, 200);
-        pdf.rect(margin, yPosition, pageWidth - 2 * margin, 30);
-        
-        pdf.setFontSize(14);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text(`HRN Total do Cliente: ${currentInspecao.hrnTotalCliente.toFixed(2)}`, margin + 5, yPosition + 10);
-        
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(`Classificação: ${hrnColor.label}`, margin + 5, yPosition + 20);
-        
-        yPosition += 40;
-      }
-
-      addFooter();
-      
-      // NOVA PÁGINA - CONTEÚDO
-      pdf.addPage();
-      pageNumber++;
-      addHeader();
-      
-      pdf.setFontSize(16);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 100, 200);
-      pdf.text('6. RESULTADOS DA INSPEÇÃO', margin, yPosition);
-      yPosition += 15;
-      
-      // Áreas e Itens com HRN
-      currentInspecao.areas.forEach((area, areaIndex) => {
-        checkPageBreak(30);
-        
-        pdf.setFontSize(14);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        const tipoArea = area.tipoChecklist === 'paineis' ? 'QUADROS ELÉTRICOS' : 'SUBESTAÇÕES';
-        pdf.text(`6.${areaIndex + 1} ÁREA: ${area.nome.toUpperCase()} - ${tipoArea}`, margin, yPosition);
-        yPosition += 8;
-        
-        // HRN da Área
-        if (area.hrnTotal && area.hrnTotal > 0) {
-          const hrnColor = getHRNColor(area.hrnTotal);
-          pdf.setFontSize(10);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(`HRN da Área: ${area.hrnTotal.toFixed(2)} - ${hrnColor.label}`, margin, yPosition);
-          yPosition += 6;
-        }
-        
-        yPosition += 6;
-
-        if (area.tipoChecklist === 'paineis' && area.painelItems) {
-          // Tabela para painéis elétricos (sem HRN)
-          const tableStartY = yPosition;
-          const colWidths = [15, 25, 80, 15, 30, 30];
-          const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'Observação', 'Recomendação'];
-          
-          pdf.setFillColor(50, 50, 50);
-          pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
-          
-          pdf.setFontSize(8);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(255, 255, 255);
-          
-          let xPos = margin;
-          headers.forEach((header, i) => {
-            pdf.text(header, xPos + 2, yPosition + 5);
-            xPos += colWidths[i];
-          });
-          
-          yPosition += 8;
-          
-          pdf.setFont('helvetica', 'normal');
-          pdf.setTextColor(0, 0, 0);
-          
-          area.painelItems.forEach((item, itemIndex) => {
-            checkPageBreak(12);
-            
-            if (itemIndex % 2 === 0) {
-              pdf.setFillColor(248, 248, 248);
-              pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
-            }
-            
-            xPos = margin;
-            const rowData = [
-              item.id.toString(),
-              item.norma,
-              item.descricao.length > 40 ? item.descricao.substring(0, 37) + '...' : item.descricao,
-              item.condicao || '-',
-              item.observacao.length > 15 ? item.observacao.substring(0, 12) + '...' : item.observacao || '-',
-              item.recomendacao.length > 15 ? item.recomendacao.substring(0, 12) + '...' : item.recomendacao || '-'
-            ];
-            
-            rowData.forEach((data, i) => {
-              pdf.text(data, xPos + 2, yPosition + 5);
-              xPos += colWidths[i];
-            });
-            
-            pdf.setDrawColor(200, 200, 200);
-            xPos = margin;
-            headers.forEach((_, i) => {
-              pdf.rect(xPos, yPosition, colWidths[i], 8);
-              xPos += colWidths[i];
-            });
-            
-            yPosition += 8;
-          });
-        } else {
-          // Tabela para subestações com HRN
-          const tableStartY = yPosition;
-          const colWidths = [15, 25, 60, 15, 15, 15, 15, 15, 20];
-          const headers = ['Item', 'Norma', 'Descrição', 'Cond.', 'PO', 'FE', 'GSD', 'NPER', 'HRN'];
-          
-          pdf.setFillColor(50, 50, 50);
-          pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
-          
-          pdf.setFontSize(8);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(255, 255, 255);
-          
-          let xPos = margin;
-          headers.forEach((header, i) => {
-            pdf.text(header, xPos + 2, yPosition + 5);
-            xPos += colWidths[i];
-          });
-          
-          yPosition += 8;
-          
-          pdf.setFont('helvetica', 'normal');
-          pdf.setTextColor(0, 0, 0);
-          
-          area.items.forEach((item, itemIndex) => {
-            checkPageBreak(12);
-            
-            if (itemIndex % 2 === 0) {
-              pdf.setFillColor(248, 248, 248);
-              pdf.rect(margin, yPosition, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
-            }
-            
-            xPos = margin;
-            const hrnValue = item.hrn || 0;
-            const hrnColor = getHRNColor(hrnValue);
-            
-            const rowData = [
-              item.id.toString(),
-              item.norma,
-              item.descricao.length > 30 ? item.descricao.substring(0, 27) + '...' : item.descricao,
-              item.condicao || '-',
-              item.po ? item.po.split('-')[0] : '-',
-              item.fe ? item.fe.split('-')[0] : '-',
-              item.gsd ? item.gsd.split('-')[0] : '-',
-              item.nper ? item.nper.split('-')[0] : '-',
-              hrnValue > 0 ? hrnValue.toFixed(2) : '-'
-            ];
-            
-            rowData.forEach((data, i) => {
-              // Destacar HRN com cor se for NC
-              if (i === 8 && item.condicao === 'NC' && hrnValue > 0) {
-                pdf.setFont('helvetica', 'bold');
-                if (hrnValue > 50) pdf.setTextColor(200, 0, 0); // Vermelho para alto risco
-                else if (hrnValue > 10) pdf.setTextColor(255, 140, 0); // Laranja para médio
-                else pdf.setTextColor(0, 150, 0); // Verde para baixo
-              } else {
-                pdf.setFont('helvetica', 'normal');
-                pdf.setTextColor(0, 0, 0);
-              }
-              
-              pdf.text(data, xPos + 2, yPosition + 5);
-              xPos += colWidths[i];
-            });
-            
-            pdf.setDrawColor(200, 200, 200);
-            xPos = margin;
-            headers.forEach((_, i) => {
-              pdf.rect(xPos, yPosition, colWidths[i], 8);
-              xPos += colWidths[i];
-            });
-            
-            yPosition += 8;
-            
-            if (item.recomendacoes && item.recomendacoes.trim()) {
-              checkPageBreak(8);
-              pdf.setFontSize(7);
-              pdf.setFont('helvetica', 'italic');
-              pdf.setTextColor(100, 100, 100);
-              pdf.text(`Recomendações: ${item.recomendacoes}`, margin + 2, yPosition + 4);
-              pdf.setFontSize(8);
-              pdf.setFont('helvetica', 'normal');
-              pdf.setTextColor(0, 0, 0);
-              yPosition += 6;
-            }
-          });
-        }
-        
-        yPosition += 15;
-      });
-      
-      if (currentInspecao.localizacao) {
-        checkPageBreak(20);
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('LOCALIZAÇÃO GPS', margin, yPosition);
-        yPosition += 8;
-        
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(`Coordenadas: ${currentInspecao.localizacao.latitude.toFixed(6)}, ${currentInspecao.localizacao.longitude.toFixed(6)}`, margin, yPosition);
-        yPosition += 5;
-        
-        if (currentInspecao.localizacao.endereco) {
-          pdf.text(`Endereço: ${currentInspecao.localizacao.endereco}`, margin, yPosition);
-          yPosition += 5;
-        }
-        
-        pdf.text(`Data/Hora: ${new Date(currentInspecao.localizacao.timestamp).toLocaleString('pt-BR')}`, margin, yPosition);
-        yPosition += 10;
-      }
-      
-      addFooter();
-      
-      const fileName = `RRTI-${currentInspecao.numeroSequencial}-${currentInspecao.nome.replace(/\s+/g, '-')}.pdf`;
-      
-      pdf.save(fileName);
-      
-      alert(`PDF gerado com sucesso!\nArquivo: ${fileName}\n\n✓ Incluído sistema HRN com cores\n✓ HRN total por área e cliente\n✓ Classificação de riscos conforme análise\n✓ Estrutura profissional mantida`);
-      
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
-      
-      let errorMessage = 'Erro ao gerar PDF. ';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('Failed to load chunk') || error.message.includes('Loading chunk')) {
-          errorMessage += 'Problema de conectividade detectado. Tente novamente em alguns segundos.';
-        } else if (error.message.includes('jsPDF') || error.message.includes('Timeout')) {
-          errorMessage += 'Biblioteca de PDF não pôde ser carregada. Verifique sua conexão com a internet.';
-        } else if (error.message.includes('CDN')) {
-          errorMessage += 'Falha ao carregar recursos externos. Tente recarregar a página.';
-        } else {
-          errorMessage += error.message;
-        }
-      } else {
-        errorMessage += 'Erro desconhecido. Tente recarregar a página.';
-      }
-      
-      alert(errorMessage + '\n\nSoluções alternativas:\n• Recarregue a página e tente novamente\n• Verifique sua conexão com a internet\n• Aguarde alguns segundos e tente novamente\n• Use a funcionalidade de exportação manual dos dados');
     }
   };
 
@@ -1557,13 +877,11 @@ export default function InspecaoEletrica() {
 
   const canCompleteInspection = (area: Area) => {
     if (area.tipoChecklist === 'paineis' && area.painelItems) {
-      const totalItems = area.painelItems.length;
       const completedItems = area.painelItems.filter(item => 
         item.condicao !== '' || item.observacao !== '' || item.recomendacao !== ''
       ).length;
       return completedItems > 0;
     } else {
-      const totalItems = area.items.length;
       const completedItems = area.items.filter(item => 
         item.condicao !== '' || item.po !== '' || item.fe !== '' || item.gsd !== '' || item.nper !== ''
       ).length;
@@ -1612,101 +930,102 @@ export default function InspecaoEletrica() {
     setCurrentView('inspecao');
   };
 
-  const salvarConfiguracoes = () => {
-    localStorage.setItem('configuracoes-sistema', JSON.stringify(configuracoes));
-    alert('Configurações salvas com sucesso!');
-  };
+  // COMPONENTE DE GEOLOCALIZAÇÃO
+  const GeolocationComponent = () => (
+    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Navigation className="w-6 h-6 text-blue-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Localização do Cliente</h3>
+        </div>
+        <button
+          onClick={obterLocalizacao}
+          disabled={loadingLocation}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            loadingLocation 
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {loadingLocation ? (
+            <>
+              <Loader className="w-4 h-4 animate-spin" />
+              Obtendo...
+            </>
+          ) : (
+            <>
+              <MapPin className="w-4 h-4" />
+              Capturar Localização
+            </>
+          )}
+        </button>
+      </div>
 
-  const resetarConfiguracoes = () => {
-    if (confirm('Tem certeza que deseja restaurar as configurações padrão? Esta ação não pode ser desfeita.')) {
-      setConfiguracoes({
-        empresa: {
-          nome: 'PA BRASIL AUTOMAÇÃO',
-          cnpj: '12.345.678/0001-90',
-          endereco: 'Rua Bálsamo, 107 - Jardim Serrano - Paracatu/MG',
-          telefone: '(38) 998368153',
-          email: 'pabrasil@pabrasil.net',
-          logo: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg',
-          marcaDagua: 'https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/fa828cdc-1102-4fee-ad59-2f41a354564e.jpg'
-        },
-        relatorios: {
-          incluirFotos: true,
-          incluirComentarios: true,
-          formatoPadrao: 'PDF',
-          assinaturasDigitais: false,
-          marcaDagua: true
-        },
-        notificacoes: {
-          emailInspecaoConcluida: true,
-          emailPrazosVencimento: true,
-          lembreteManutencao: false,
-          alertasNaoConformidade: true
-        },
-        sistema: {
-          tema: 'claro',
-          idioma: 'pt-BR',
-          autoSalvar: true,
-          backupAutomatico: true,
-          qualidadeFoto: 'alta'
-        },
-        seguranca: {
-          senhaObrigatoria: false,
-          tempoSessao: 60,
-          logAuditoria: true,
-          criptografiaLocal: false
-        }
-      });
-      alert('Configurações restauradas para os valores padrão!');
-    }
-  };
+      {locationError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <p className="text-red-800 text-sm">{locationError}</p>
+          </div>
+        </div>
+      )}
 
-  // FUNÇÃO PARA OBTER DADOS DOS CLIENTES COM HRN
-  const getClientesData = () => {
-    const clientesMap = new Map();
+      {localizacao && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h4 className="font-medium text-green-800 mb-2">Coordenadas GPS</h4>
+              <div className="text-sm text-green-700 space-y-1">
+                <p><span className="font-medium">Latitude:</span> {localizacao.latitude.toFixed(6)}</p>
+                <p><span className="font-medium">Longitude:</span> {localizacao.longitude.toFixed(6)}</p>
+                {localizacao.precisao && (
+                  <p><span className="font-medium">Precisão:</span> ±{Math.round(localizacao.precisao)}m</p>
+                )}
+                <p><span className="font-medium">Capturado em:</span> {new Date(localizacao.timestamp).toLocaleString('pt-BR')}</p>
+              </div>
+            </div>
+            
+            {localizacao.endereco && (
+              <div>
+                <h4 className="font-medium text-green-800 mb-2">Endereço</h4>
+                <p className="text-sm text-green-700">{localizacao.endereco}</p>
+              </div>
+            )}
+          </div>
 
-    inspecoes.forEach(inspecao => {
-      const cliente = inspecao.responsavelCliente;
-      if (!clientesMap.has(cliente)) {
-        clientesMap.set(cliente, {
-          nome: cliente,
-          totalInspecoes: 0,
-          inspecoesConcluidas: 0,
-          inspecoesAndamento: 0,
-          inspecoesPendentes: 0,
-          ultimaInspecao: null,
-          numeroSequenciais: [],
-          conformidade: { total: 0, conformes: 0, naoConformes: 0, naoAplicaveis: 0 },
-          hrnTotal: 0 // Novo campo para HRN total do cliente
-        });
-      }
+          <div className="mt-4 flex gap-2">
+            <a
+              href={`https://www.google.com/maps?q=${localizacao.latitude},${localizacao.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+            >
+              <Globe className="w-4 h-4" />
+              Ver no Google Maps
+            </a>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${localizacao.latitude}, ${localizacao.longitude}`);
+                alert('Coordenadas copiadas para a área de transferência!');
+              }}
+              className="flex items-center gap-2 bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-700 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Copiar Coordenadas
+            </button>
+          </div>
+        </div>
+      )}
 
-      const clienteData = clientesMap.get(cliente);
-      clienteData.totalInspecoes++;
-      
-      if (inspecao.status === 'Concluída') clienteData.inspecoesConcluidas++;
-      else if (inspecao.status === 'Em Andamento') clienteData.inspecoesAndamento++;
-      else if (inspecao.status === 'Pendente') clienteData.inspecoesPendentes++;
-
-      clienteData.numeroSequenciais.push(inspecao.numeroSequencial);
-
-      if (!clienteData.ultimaInspecao || new Date(inspecao.createdAt) > new Date(clienteData.ultimaInspecao)) {
-        clienteData.ultimaInspecao = inspecao.createdAt;
-      }
-
-      const stats = getInspecaoStats(inspecao);
-      clienteData.conformidade.total += stats.totalItems;
-      clienteData.conformidade.conformes += stats.conformes;
-      clienteData.conformidade.naoConformes += stats.naoConformes;
-      clienteData.conformidade.naoAplicaveis += stats.naoAplicaveis;
-
-      // Somar HRN total do cliente
-      if (inspecao.hrnTotalCliente) {
-        clienteData.hrnTotal += inspecao.hrnTotalCliente;
-      }
-    });
-
-    return Array.from(clientesMap.values());
-  };
+      {!localizacao && !locationError && !loadingLocation && (
+        <div className="text-center py-8">
+          <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p className="text-gray-500">Clique em "Capturar Localização" para registrar a posição atual</p>
+          <p className="text-gray-400 text-sm mt-1">A localização será anexada à inspeção para referência</p>
+        </div>
+      )}
+    </div>
+  );
 
   // COMPONENTE DE CABEÇALHO PROFISSIONAL
   const ProfessionalHeader = ({ title, subtitle, showCompanyInfo = true }: { title: string; subtitle?: string; showCompanyInfo?: boolean }) => (
@@ -1755,26 +1074,6 @@ export default function InspecaoEletrica() {
     </div>
   );
 
-  // COMPONENTE DE TABELA PROFISSIONAL
-  const ProfessionalTable = ({ children, headers }: { children: React.ReactNode; headers: string[] }) => (
-    <div className="bg-white shadow-lg rounded-lg overflow-hidden border">
-      <table className="w-full">
-        <thead className="bg-gray-800 text-white">
-          <tr>
-            {headers.map((header, index) => (
-              <th key={index} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border-r border-gray-600 last:border-r-0">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {children}
-        </tbody>
-      </table>
-    </div>
-  );
-
   // COMPONENTE DE SEÇÃO NUMERADA
   const NumberedSection = ({ number, title, children }: { number: string; title: string; children: React.ReactNode }) => (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -1788,999 +1087,7 @@ export default function InspecaoEletrica() {
     </div>
   );
 
-  // Renderização da tela de seleção de tipo de checklist
-  if (currentView === 'selecionar-tipo-checklist') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ProfessionalHeader 
-          title="SELEÇÃO DO TIPO DE CHECKLIST" 
-          subtitle={`Área: ${novaArea} - Escolha o Tipo de Inspeção`}
-        />
-
-        <div className="max-w-4xl mx-auto p-6">
-          <div className="mb-6">
-            <button
-              onClick={() => setCurrentView('inspecao')}
-              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
-            >
-              <Home className="w-5 h-5" />
-              Voltar à Inspeção
-            </button>
-          </div>
-
-          <NumberedSection number="1" title="ESCOLHA O TIPO DE CHECKLIST">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Building className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-xl font-bold text-blue-900 mb-2">Check List para Subestações</h3>
-                  <p className="text-blue-700 text-sm">Inspeção completa baseada na NR-10 com sistema HRN</p>
-                </div>
-
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-center gap-2 text-blue-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">75 itens de verificação NR-10</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-blue-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Colunas: Condição, PO, FE, GSD, NPER</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-blue-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Cálculo automático de HRN</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-blue-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Classificação de riscos com cores</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => showItemSelectionForType('subestacoes')}
-                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  Selecionar Itens NR-10 (75 itens)
-                </button>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 bg-green-600 text-white rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Settings className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-xl font-bold text-green-900 mb-2">Checklist para Quadros Elétricos</h3>
-                  <p className="text-green-700 text-sm">Inspeção específica para painéis elétricos</p>
-                </div>
-
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-center gap-2 text-green-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">20 itens específicos para painéis</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-green-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Colunas: Condição, Observação, Recomendação</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-green-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Normas NBR 5410 e NR-10</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-green-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Foco em aspectos práticos</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => showItemSelectionForType('paineis')}
-                  className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
-                >
-                  Selecionar Itens de Painéis (20 itens)
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <h5 className="font-medium text-yellow-900">Sistema HRN - Hierarquia de Risco Numérico</h5>
-                  <div className="text-yellow-800 text-sm mt-2 space-y-1">
-                    <p><strong>Check List para Subestações:</strong> Inclui cálculo automático de HRN quando Condição = NC, multiplicando os valores PO × FE × GSD × NPER.</p>
-                    <p><strong>Classificação de Riscos:</strong> Verde (Aceitável/Muito Baixo), Amarelo (Baixo/Significante), Vermelho (Alto/Muito Alto/Extremo/Inaceitável).</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </NumberedSection>
-        </div>
-      </div>
-    );
-  }
-
-  // Renderização da tela de gerenciamento de imagens (mantida igual)
-  if (currentView === 'gerenciar-imagens') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ProfessionalHeader 
-          title="GERENCIAMENTO DE IMAGENS PADRÃO" 
-          subtitle="Configuração das Imagens de Referência dos 75 Itens NR-10"
-        />
-
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="mb-6">
-            <button
-              onClick={() => setCurrentView('home')}
-              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
-            >
-              <Home className="w-5 h-5" />
-              Voltar ao Início
-            </button>
-          </div>
-
-          <NumberedSection number="1" title="SELEÇÃO DE ITENS PARA IMAGEM PADRÃO">
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={toggleAllItemsImagemPadrao}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                      configuracaoImagensPadrao.itensSelecionados.length === imagensPadrao.length
-                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    {configuracaoImagensPadrao.itensSelecionados.length === imagensPadrao.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
-                  </button>
-                  <span className="text-sm text-gray-600 font-medium">
-                    {configuracaoImagensPadrao.itensSelecionados.length} de {imagensPadrao.length} itens selecionados para receber imagem padrão
-                  </span>
-                </div>
-                <button
-                  onClick={salvarConfiguracaoImagensPadrao}
-                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar Configuração
-                </button>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h5 className="font-medium text-blue-900">Como Funciona</h5>
-                    <p className="text-blue-800 text-sm mt-1">
-                      Selecione quais dos 75 itens NR-10 devem receber uma imagem padrão automaticamente quando novas áreas forem criadas. 
-                      Apenas os itens marcados terão suas imagens aplicadas nas inspeções futuras.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {imagensPadrao.map((item) => (
-                  <div key={item.id} className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                    item.precisaImagem ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}>
-                    <div 
-                      className="flex items-start gap-3"
-                      onClick={() => toggleItemImagemPadrao(item.id)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={item.precisaImagem}
-                        onChange={() => toggleItemImagemPadrao(item.id)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                            {item.id}
-                          </div>
-                          <div className="text-sm font-medium text-blue-600">{item.norma}</div>
-                        </div>
-                        <p className="text-sm text-gray-700 line-clamp-2">{item.descricao}</p>
-                        <div className="text-xs text-gray-500 mt-1">{item.categoria}</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </NumberedSection>
-
-          <NumberedSection number="2" title="CONTROLES DE BUSCA E FILTRO">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Buscar por Norma ou Descrição
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Ex: NR10.3.9 ou identificação..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Filtrar por Categoria
-                </label>
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-                  >
-                    {categorias.map(categoria => (
-                      <option key={categoria} value={categoria}>
-                        {categoria === 'todas' ? 'Todas as Categorias' : categoria}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-gray-600">
-                Mostrando {imagensFiltradas.length} de {imagensPadrao.length} itens
-              </p>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Image className="w-4 h-4" />
-                <span>Clique na imagem para visualizar em tamanho maior</span>
-              </div>
-            </div>
-          </NumberedSection>
-
-          <NumberedSection number="3" title="IMAGENS PADRÃO DOS ITENS NR-10">
-            <div className="space-y-4">
-              {imagensFiltradas.map((item) => (
-                <div key={item.id} className={`rounded-lg p-4 border ${
-                  item.precisaImagem ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
-                }`}>
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-                    <div className="lg:col-span-1 text-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mx-auto ${
-                        item.precisaImagem ? 'bg-blue-600 text-white' : 'bg-gray-400 text-white'
-                      }`}>
-                        {item.id}
-                      </div>
-                      {item.precisaImagem && (
-                        <div className="text-xs text-blue-600 mt-1 font-medium">ATIVO</div>
-                      )}
-                    </div>
-
-                    <div className="lg:col-span-2">
-                      <div className={`text-sm font-medium ${item.precisaImagem ? 'text-blue-600' : 'text-gray-600'}`}>
-                        {item.norma}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">{item.categoria}</div>
-                    </div>
-
-                    <div className="lg:col-span-4">
-                      <p className="text-sm text-gray-700 line-clamp-2">{item.descricao}</p>
-                    </div>
-
-                    <div className="lg:col-span-2 text-center">
-                      {item.precisaImagem ? (
-                        <>
-                          <img
-                            src={item.imagemPadrao}
-                            alt={`Referência para item ${item.id}`}
-                            className="w-20 h-16 object-cover rounded border cursor-pointer hover:opacity-75 transition-opacity mx-auto"
-                            onClick={() => window.open(item.imagemPadrao, '_blank')}
-                            title="Clique para ver em tamanho maior"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Imagem Ativa</p>
-                        </>
-                      ) : (
-                        <div className="w-20 h-16 bg-gray-200 rounded border flex items-center justify-center mx-auto">
-                          <Image className="w-6 h-6 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="lg:col-span-3">
-                      {item.precisaImagem ? (
-                        editingImage === item.id ? (
-                          <div className="space-y-2">
-                            <input
-                              type="url"
-                              value={newImageUrl}
-                              onChange={(e) => setNewImageUrl(e.target.value)}
-                              placeholder="https://exemplo.com/nova-imagem.jpg"
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => updateImagemPadrao(item.id, newImageUrl)}
-                                disabled={!newImageUrl.trim()}
-                                className={`flex-1 px-3 py-2 text-xs rounded transition-colors ${
-                                  newImageUrl.trim()
-                                    ? 'bg-green-600 text-white hover:bg-green-700'
-                                    : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                }`}
-                              >
-                                <CheckCircle className="w-3 h-3 inline mr-1" />
-                                Salvar
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingImage(null);
-                                  setNewImageUrl('');
-                                }}
-                                className="flex-1 px-3 py-2 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-                              >
-                                <XCircle className="w-3 h-3 inline mr-1" />
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setEditingImage(item.id);
-                              setNewImageUrl(item.imagemPadrao);
-                            }}
-                            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
-                          >
-                            <Edit className="w-4 h-4" />
-                            Alterar Imagem
-                          </button>
-                        )
-                      ) : (
-                        <div className="text-center text-gray-500">
-                          <p className="text-sm">Item não selecionado</p>
-                          <p className="text-xs">Marque o item acima para ativar</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {imagensFiltradas.length === 0 && (
-              <div className="text-center py-12">
-                <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">Nenhum item encontrado</p>
-                <p className="text-gray-400">Tente ajustar os filtros de busca</p>
-              </div>
-            )}
-          </NumberedSection>
-
-          <NumberedSection number="4" title="INSTRUÇÕES DE USO">
-            <div className="prose max-w-none">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Como Configurar</h4>
-                  <ol className="list-decimal list-inside space-y-2 text-gray-700">
-                    <li>Na Seção 1, marque os itens que devem receber imagem padrão</li>
-                    <li>Clique em "Salvar Configuração" para aplicar as seleções</li>
-                    <li>Na Seção 3, altere as URLs das imagens dos itens ativos</li>
-                    <li>As configurações serão aplicadas em todas as novas inspeções</li>
-                  </ol>
-                </div>
-
-                <div>
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Recomendações</h4>
-                  <ul className="list-disc list-inside space-y-2 text-gray-700">
-                    <li>Selecione apenas itens que realmente precisam de referência visual</li>
-                    <li>Use imagens de alta qualidade (mínimo 400x300px)</li>
-                    <li>Prefira URLs de serviços confiáveis (Unsplash, etc.)</li>
-                    <li>Teste as URLs antes de salvar para evitar links quebrados</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                  <div>
-                    <h5 className="font-medium text-green-900">Aplicação Automática</h5>
-                    <p className="text-green-800 text-sm mt-1">
-                      Quando você criar uma nova área de inspeção, apenas os itens selecionados na Seção 1 receberão 
-                      automaticamente suas imagens padrão. Isso otimiza o processo e evita carregar imagens desnecessárias.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </NumberedSection>
-        </div>
-      </div>
-    );
-  }
-
-  // Renderização da tela de dashboard com HRN
-  if (currentView === 'dashboard') {
-    const clientesData = getClientesData();
-    
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ProfessionalHeader 
-          title="DASHBOARD HRN - HIERARQUIA DE RISCO NUMÉRICO" 
-          subtitle="Análise de Conformidade NR-10 e Classificação de Riscos"
-        />
-
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="mb-6">
-            <button
-              onClick={() => setCurrentView('home')}
-              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
-            >
-              <Home className="w-5 h-5" />
-              Voltar ao Início
-            </button>
-          </div>
-
-          <NumberedSection number="1" title="ESTATÍSTICAS GERAIS DO SISTEMA">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-100 text-sm font-medium">TOTAL DE CLIENTES</p>
-                    <p className="text-3xl font-bold">{clientesData.length}</p>
-                  </div>
-                  <User className="w-8 h-8 text-blue-200" />
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100 text-sm font-medium">TOTAL DE INSPEÇÕES</p>
-                    <p className="text-3xl font-bold">{inspecoes.length}</p>
-                  </div>
-                  <FileText className="w-8 h-8 text-green-200" />
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white p-6 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-yellow-100 text-sm font-medium">EM ANDAMENTO</p>
-                    <p className="text-3xl font-bold">
-                      {inspecoes.filter(i => i.status === 'Em Andamento').length}
-                    </p>
-                  </div>
-                  <Clock className="w-8 h-8 text-yellow-200" />
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-6 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-red-100 text-sm font-medium">HRN TOTAL SISTEMA</p>
-                    <p className="text-3xl font-bold">
-                      {clientesData.reduce((total, cliente) => total + cliente.hrnTotal, 0).toFixed(0)}
-                    </p>
-                  </div>
-                  <AlertCircle className="w-8 h-8 text-red-200" />
-                </div>
-              </div>
-            </div>
-          </NumberedSection>
-
-          <NumberedSection number="2" title="DADOS DETALHADOS POR CLIENTE COM HRN">
-            {clientesData.length === 0 ? (
-              <div className="text-center py-12">
-                <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">Nenhum cliente cadastrado</p>
-                <p className="text-gray-400">Crie uma inspeção para começar</p>
-              </div>
-            ) : (
-              <ProfessionalTable headers={['Cliente', 'Inspeções', 'Status', 'Conformidade', 'HRN Total', 'Classificação', 'Última Inspeção', 'Ações']}>
-                {clientesData.map((cliente, index) => {
-                  const conformidadePercentual = cliente.conformidade.total > 0 
-                    ? Math.round((cliente.conformidade.conformes / cliente.conformidade.total) * 100)
-                    : 0;
-
-                  const hrnColor = getHRNColor(cliente.hrnTotal);
-
-                  return (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-gray-900">{cliente.nome}</div>
-                        <div className="text-sm text-gray-600">Cliente Ativo</div>
-                      </td>
-                      
-                      <td className="px-4 py-4 text-center">
-                        <div className="text-2xl font-bold text-blue-600">{cliente.totalInspecoes}</div>
-                        <div className="text-xs text-gray-500">Total</div>
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div>
-                            <div className="text-sm font-semibold text-green-600">{cliente.inspecoesConcluidas}</div>
-                            <div className="text-xs text-gray-500">Concluídas</div>
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-yellow-600">{cliente.inspecoesAndamento}</div>
-                            <div className="text-xs text-gray-500">Andamento</div>
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-red-600">{cliente.inspecoesPendentes}</div>
-                            <div className="text-xs text-gray-500">Pendentes</div>
-                          </div>
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1">
-                            <div className="flex justify-between text-sm mb-1">
-                              <span className="font-medium">{conformidadePercentual}%</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${conformidadePercentual}%` }}
-                              ></div>
-                            </div>
-                            <div className="flex justify-between text-xs text-gray-500 mt-1">
-                              <span>C: {cliente.conformidade.conformes}</span>
-                              <span>NC: {cliente.conformidade.naoConformes}</span>
-                              <span>NA: {cliente.conformidade.naoAplicaveis}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        <div className="text-2xl font-bold text-red-600">
-                          {cliente.hrnTotal.toFixed(1)}
-                        </div>
-                        <div className="text-xs text-gray-500">Risco Acumulado</div>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className={`px-3 py-2 rounded-full text-xs font-medium text-center ${hrnColor.bg} ${hrnColor.text}`}>
-                          {hrnColor.label}
-                        </div>
-                        <div className="text-xs text-gray-500 text-center mt-1">
-                          {cliente.hrnTotal > 0 ? `HRN: ${cliente.hrnTotal.toFixed(2)}` : 'Sem NC'}
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4 text-sm text-gray-600">
-                        {cliente.ultimaInspecao 
-                          ? new Date(cliente.ultimaInspecao).toLocaleDateString('pt-BR')
-                          : 'N/A'
-                        }
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="flex gap-1">
-                          <button className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button className="bg-gray-600 text-white p-2 rounded hover:bg-gray-700 transition-colors">
-                            <FileDown className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </ProfessionalTable>
-            )}
-          </NumberedSection>
-
-          <NumberedSection number="3" title="LEGENDA DE CLASSIFICAÇÃO HRN">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-green-100 border border-green-200 rounded-lg p-4">
-                <h4 className="font-semibold text-green-800 mb-2">ACEITÁVEL / MUITO BAIXO</h4>
-                <p className="text-sm text-green-700 mb-2">HRN: 0-1 / 1-5</p>
-                <p className="text-xs text-green-600">Manter medidas de proteção atuais</p>
-              </div>
-
-              <div className="bg-yellow-100 border border-yellow-200 rounded-lg p-4">
-                <h4 className="font-semibold text-yellow-800 mb-2">BAIXO / SIGNIFICANTE</h4>
-                <p className="text-sm text-yellow-700 mb-2">HRN: 5-10 / 10-50</p>
-                <p className="text-xs text-yellow-600">Garantir eficácia das medidas e aprimorar</p>
-              </div>
-
-              <div className="bg-red-100 border border-red-200 rounded-lg p-4">
-                <h4 className="font-semibold text-red-800 mb-2">ALTO / MUITO ALTO</h4>
-                <p className="text-sm text-red-700 mb-2">HRN: 50-100 / 100-500</p>
-                <p className="text-xs text-red-600">Reduzir ou eliminar risco, implementar proteções</p>
-              </div>
-
-              <div className="bg-red-200 border border-red-300 rounded-lg p-4">
-                <h4 className="font-semibold text-red-900 mb-2">EXTREMO / INACEITÁVEL</h4>
-                <p className="text-sm text-red-800 mb-2">HRN: 500-1000 / >1000</p>
-                <p className="text-xs text-red-700">Ação imediata, interromper atividades</p>
-              </div>
-            </div>
-          </NumberedSection>
-
-          <NumberedSection number="4" title="OBSERVAÇÕES E CONCLUSÕES HRN">
-            <div className="prose max-w-none">
-              <p className="text-gray-700 mb-4">
-                Este dashboard apresenta a Hierarquia de Risco Numérico (HRN) calculada automaticamente para itens com condição "NC" 
-                (Não Conforme) através da multiplicação: PO × FE × GSD × NPER, conforme metodologia de análise de riscos.
-              </p>
-              
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">4.1 Metodologia HRN</h4>
-              <ul className="list-disc pl-6 mb-4 text-gray-700">
-                <li><strong>PO (Probabilidade de Ocorrência):</strong> De 0,033 (Quase Impossível) a 15 (Certeza)</li>
-                <li><strong>FE (Frequência de Exposição):</strong> De 0,5 (Anualmente) a 5 (Constantemente)</li>
-                <li><strong>GSD (Gravidade dos Danos):</strong> De 0,1 (Escoriação) a 15 (Fatalidade)</li>
-                <li><strong>NPER (Número de Pessoas Expostas):</strong> De 1 (1-2 pessoas) a 12 (Mais de 50 pessoas)</li>
-              </ul>
-
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">4.2 Aplicação Prática</h4>
-              <p className="text-gray-700 mb-4">
-                O sistema calcula automaticamente o HRN apenas para itens marcados como "NC", permitindo priorização 
-                de ações corretivas baseada no nível de risco. Áreas e clientes com HRN mais alto requerem atenção imediata.
-              </p>
-
-              <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
-                  <div>
-                    <h5 className="font-medium text-orange-900">Correlação com NR-28</h5>
-                    <p className="text-orange-800 text-sm mt-1">
-                      Os valores HRN podem ser correlacionados com os critérios da NR-28 para determinação de multas 
-                      e penalidades, considerando a gravidade das não conformidades identificadas.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </NumberedSection>
-        </div>
-
-        <div className="bg-gray-800 text-white p-6 mt-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2">
-                  <img 
-                    src={configuracoes.empresa.logo} 
-                    alt="Logo PA BRASIL AUTOMAÇÃO" 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <div>
-                  <p className="font-semibold">{configuracoes.empresa.nome}</p>
-                  <p className="text-gray-300 text-sm">Dashboard HRN gerado em {new Date().toLocaleDateString('pt-BR')}</p>
-                </div>
-              </div>
-              <div className="text-right text-sm text-gray-300">
-                <p>Sistema de Análise de Riscos NR-10</p>
-                <p>Hierarquia de Risco Numérico - Versão 1.0</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Renderização da tela de configurações (mantida igual)
-  if (currentView === 'configuracoes') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ProfessionalHeader 
-          title="CONFIGURAÇÕES DO SISTEMA" 
-          subtitle="Personalização e Ajustes Técnicos"
-        />
-
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="mb-6 flex items-center justify-between">
-            <button
-              onClick={() => setCurrentView('home')}
-              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
-            >
-              <Home className="w-5 h-5" />
-              Voltar ao Início
-            </button>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={resetarConfiguracoes}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Restaurar Padrão
-              </button>
-              <button
-                onClick={salvarConfiguracoes}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Save className="w-4 h-4" />
-                Salvar Configurações
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-lg shadow-lg p-4">
-                <nav className="space-y-2">
-                  <button
-                    onClick={() => setActiveConfigTab('empresa')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeConfigTab === 'empresa' 
-                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Building className="w-5 h-5" />
-                    Dados da Empresa
-                  </button>
-                  
-                  <button
-                    onClick={() => setActiveConfigTab('relatorios')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeConfigTab === 'relatorios' 
-                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <FileText className="w-5 h-5" />
-                    Relatórios
-                  </button>
-                  
-                  <button
-                    onClick={() => setActiveConfigTab('notificacoes')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeConfigTab === 'notificacoes' 
-                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Bell className="w-5 h-5" />
-                    Notificações
-                  </button>
-                  
-                  <button
-                    onClick={() => setActiveConfigTab('sistema')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeConfigTab === 'sistema' 
-                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Monitor className="w-5 h-5" />
-                    Sistema
-                  </button>
-                  
-                  <button
-                    onClick={() => setActiveConfigTab('seguranca')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeConfigTab === 'seguranca' 
-                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-600' 
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Shield className="w-5 h-5" />
-                    Segurança
-                  </button>
-                </nav>
-              </div>
-            </div>
-
-            <div className="lg:col-span-3">
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                
-                {activeConfigTab === 'empresa' && (
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900 mb-6">Dados da Empresa</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Nome da Empresa</label>
-                        <input
-                          type="text"
-                          value={configuracoes.empresa.nome}
-                          onChange={(e) => setConfiguracoes(prev => ({
-                            ...prev,
-                            empresa: { ...prev.empresa, nome: e.target.value }
-                          }))}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">CNPJ</label>
-                        <input
-                          type="text"
-                          value={configuracoes.empresa.cnpj}
-                          onChange={(e) => setConfiguracoes(prev => ({
-                            ...prev,
-                            empresa: { ...prev.empresa, cnpj: e.target.value }
-                          }))}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Endereço</label>
-                        <input
-                          type="text"
-                          value={configuracoes.empresa.endereco}
-                          onChange={(e) => setConfiguracoes(prev => ({
-                            ...prev,
-                            empresa: { ...prev.empresa, endereco: e.target.value }
-                          }))}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
-                        <input
-                          type="text"
-                          value={configuracoes.empresa.telefone}
-                          onChange={(e) => setConfiguracoes(prev => ({
-                            ...prev,
-                            empresa: { ...prev.empresa, telefone: e.target.value }
-                          }))}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
-                        <input
-                          type="email"
-                          value={configuracoes.empresa.email}
-                          onChange={(e) => setConfiguracoes(prev => ({
-                            ...prev,
-                            empresa: { ...prev.empresa, email: e.target.value }
-                          }))}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">URL da Marca D'água</label>
-                        <input
-                          type="url"
-                          value={configuracoes.empresa.marcaDagua}
-                          onChange={(e) => setConfiguracoes(prev => ({
-                            ...prev,
-                            empresa: { ...prev.empresa, marcaDagua: e.target.value }
-                          }))}
-                          placeholder="https://exemplo.com/marca-dagua.png"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                        <p className="text-sm text-gray-500 mt-1">Esta imagem será usada como marca d'água nos PDFs</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Renderização da tela de seleção de itens (mantida igual)
-  if (currentView === 'selecionar-itens') {
-    const itemsToShow = tipoChecklistSelecionado === 'subestacoes' ? checklistItems : painelEletricoItems;
-    const tipoNome = tipoChecklistSelecionado === 'subestacoes' ? 'Check List para Subestações' : 'Checklist para Quadros Elétricos';
-    
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <ProfessionalHeader 
-          title="SELEÇÃO DE ITENS PARA INSPEÇÃO" 
-          subtitle={`Área: ${novaArea} - ${tipoNome}`}
-        />
-
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={toggleSelectAll}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                    selectAllItems 
-                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  {selectAllItems ? 'Desmarcar Todos' : 'Selecionar Todos'}
-                </button>
-                <span className="text-sm text-gray-600 font-medium">
-                  {selectedItems.length} de {itemsToShow.length} itens selecionados
-                </span>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setCurrentView('selecionar-tipo-checklist')}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Voltar
-                </button>
-                <button
-                  onClick={addAreaWithSelectedItems}
-                  disabled={selectedItems.length === 0}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    selectedItems.length > 0 
-                      ? 'bg-green-600 text-white hover:bg-green-700' 
-                      : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  }`}
-                >
-                  Criar Área com Itens Selecionados ({selectedItems.length})
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <h5 className="font-medium text-blue-900">Tipo de Checklist Selecionado</h5>
-                  <p className="text-blue-800 text-sm mt-1">
-                    <strong>{tipoNome}</strong> - {itemsToShow.length} itens disponíveis para seleção.
-                    {tipoChecklistSelecionado === 'subestacoes' 
-                      ? ' Focado na conformidade geral com a NR-10 para subestações, com cálculo automático de HRN.'
-                      : ' Específico para quadros elétricos com base na NBR 5410 e NR-10.'
-                    }
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <ProfessionalTable headers={['', 'Item', 'Norma', 'Descrição']}>
-            {itemsToShow.map((item, index) => (
-              <tr 
-                key={item.id} 
-                className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${
-                  selectedItems.includes(item.id) ? 'bg-blue-50' : ''
-                } hover:bg-blue-100 transition-colors`}
-              >
-                <td className="px-4 py-4 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={selectedItems.includes(item.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggleItemSelection(item.id);
-                    }}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                </td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {item.id}
-                </td>
-                <td className="px-4 py-4 text-sm text-gray-900 font-medium">
-                  {item.norma}
-                </td>
-                <td className="px-4 py-4 text-sm text-gray-700">
-                  {item.descricao}
-                </td>
-              </tr>
-            ))}
-          </ProfessionalTable>
-        </div>
-      </div>
-    );
-  }
-
-  // Renderização da tela inicial (mantida igual)
+  // Renderização da tela inicial
   if (currentView === 'home') {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -2838,107 +1145,124 @@ export default function InspecaoEletrica() {
                 <p className="text-gray-400">Clique em "Nova Inspeção" para começar</p>
               </div>
             ) : (
-              <ProfessionalTable headers={['Inspeção', 'Contrato', 'Cliente', 'Engenheiro', 'Data', 'Status', 'HRN Total', 'Progresso', 'Ações']}>
-                {inspecoes.map(inspecao => {
-                  const stats = getInspecaoStats(inspecao);
-                  const progresso = stats.totalItems > 0 ? 
-                    Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.totalItems) * 100) : 0;
-
-                  const hrnColor = getHRNColor(inspecao.hrnTotalCliente || 0);
-
-                  return (
-                    <tr key={inspecao.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-gray-900">{inspecao.nome}</div>
-                        <div className="text-sm text-blue-600 font-mono">{inspecao.numeroSequencial}</div>
-                        <div className="text-xs text-gray-500">
-                          {inspecao.areas.length} área(s) - 
-                          {inspecao.areas.filter(a => a.tipoChecklist === 'subestacoes').length > 0 && ' Subestações'}
-                          {inspecao.areas.filter(a => a.tipoChecklist === 'paineis').length > 0 && ' Painéis'}
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4 text-sm text-gray-900 font-mono">
-                        {inspecao.numeroContrato}
-                      </td>
-                      
-                      <td className="px-4 py-4 text-sm text-gray-700">
-                        {inspecao.responsavelCliente}
-                      </td>
-                      
-                      <td className="px-4 py-4 text-sm text-gray-700">
-                        {inspecao.engenheiroResponsavel}
-                      </td>
-                      
-                      <td className="px-4 py-4 text-sm text-gray-700">
-                        {new Date(inspecao.data).toLocaleDateString('pt-BR')}
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          inspecao.status === 'Concluída' ? 'bg-green-100 text-green-800' :
-                          inspecao.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {inspecao.status}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        {inspecao.hrnTotalCliente && inspecao.hrnTotalCliente > 0 ? (
-                          <div>
-                            <div className="text-lg font-bold text-red-600">
-                              {inspecao.hrnTotalCliente.toFixed(1)}
-                            </div>
-                            <div className={`px-2 py-1 rounded text-xs font-medium ${hrnColor.bg} ${hrnColor.text}`}>
-                              {hrnColor.label}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-sm text-gray-500">Sem NC</div>
-                        )}
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1">
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${progresso}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          <span className="text-xs text-gray-600 font-medium">{progresso}%</span>
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              setCurrentInspecao(inspecao);
-                              setCurrentView('inspecao');
-                            }}
-                            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCurrentInspecao(inspecao);
-                              generatePDF();
-                            }}
-                            className="bg-gray-600 text-white p-2 rounded hover:bg-gray-700 transition-colors"
-                          >
-                            <FileDown className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-800 text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Inspeção</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Contrato</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Engenheiro</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Data</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">HRN Total</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Progresso</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Ações</th>
                     </tr>
-                  );
-                })}
-              </ProfessionalTable>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {inspecoes.map(inspecao => {
+                      const stats = getInspecaoStats(inspecao);
+                      const progresso = stats.totalItems > 0 ? 
+                        Math.round(((stats.conformes + stats.naoConformes + stats.naoAplicaveis) / stats.totalItems) * 100) : 0;
+
+                      const hrnColor = getHRNColor(inspecao.hrnTotalCliente || 0);
+
+                      return (
+                        <tr key={inspecao.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-4">
+                            <div className="font-semibold text-gray-900">{inspecao.nome}</div>
+                            <div className="text-sm text-blue-600 font-mono">{inspecao.numeroSequencial}</div>
+                            <div className="text-xs text-gray-500">
+                              {inspecao.areas.length} área(s) - 
+                              {inspecao.areas.filter(a => a.tipoChecklist === 'subestacoes').length > 0 && ' Subestações'}
+                              {inspecao.areas.filter(a => a.tipoChecklist === 'paineis').length > 0 && ' Painéis'}
+                            </div>
+                          </td>
+                          
+                          <td className="px-4 py-4 text-sm text-gray-900 font-mono">
+                            {inspecao.numeroContrato}
+                          </td>
+                          
+                          <td className="px-4 py-4 text-sm text-gray-700">
+                            {inspecao.responsavelCliente}
+                          </td>
+                          
+                          <td className="px-4 py-4 text-sm text-gray-700">
+                            {inspecao.engenheiroResponsavel}
+                          </td>
+                          
+                          <td className="px-4 py-4 text-sm text-gray-700">
+                            {new Date(inspecao.data).toLocaleDateString('pt-BR')}
+                          </td>
+                          
+                          <td className="px-4 py-4">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              inspecao.status === 'Concluída' ? 'bg-green-100 text-green-800' :
+                              inspecao.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {inspecao.status}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4 text-center">
+                            {inspecao.hrnTotalCliente && inspecao.hrnTotalCliente > 0 ? (
+                              <div>
+                                <div className="text-lg font-bold text-red-600">
+                                  {inspecao.hrnTotalCliente.toFixed(1)}
+                                </div>
+                                <div className={`px-2 py-1 rounded text-xs font-medium ${hrnColor.bg} ${hrnColor.text}`}>
+                                  {hrnColor.label}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-500">Sem NC</div>
+                            )}
+                          </td>
+                          
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${progresso}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                              <span className="text-xs text-gray-600 font-medium">{progresso}%</span>
+                            </div>
+                          </td>
+                          
+                          <td className="px-4 py-4">
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => {
+                                  setCurrentInspecao(inspecao);
+                                  setCurrentView('inspecao');
+                                }}
+                                className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCurrentInspecao(inspecao);
+                                  alert('Funcionalidade de PDF será implementada em breve!');
+                                }}
+                                className="bg-gray-600 text-white p-2 rounded hover:bg-gray-700 transition-colors"
+                              >
+                                <FileDown className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </NumberedSection>
         </div>
@@ -2970,7 +1294,7 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de nova inspeção (mantida igual)
+  // Renderização da tela de nova inspeção
   if (currentView === 'nova-inspecao') {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -3093,7 +1417,7 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de inspeção (mantida igual)
+  // Renderização da tela de inspeção
   if (currentView === 'inspecao' && currentInspecao) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -3132,7 +1456,7 @@ export default function InspecaoEletrica() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={generatePDF}
+                  onClick={() => alert('Funcionalidade de PDF será implementada em breve!')}
                   className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
                 >
                   <FileDown className="w-4 h-4" />
@@ -3277,7 +1601,7 @@ export default function InspecaoEletrica() {
     );
   }
 
-  // Renderização da tela de checklist ATUALIZADA COM HRN
+  // Renderização da tela de checklist
   if (currentView === 'checklist' && currentArea && currentInspecao) {
     const isPainelChecklist = currentArea.tipoChecklist === 'paineis';
     const tipoNome = isPainelChecklist ? 'Quadros Elétricos' : 'Check List para Subestações';
@@ -3716,38 +2040,6 @@ export default function InspecaoEletrica() {
           </div>
         </div>
 
-        {/* Modal da Câmera */}
-        {cameraOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h3 className="text-lg font-semibold mb-4">Tirar Foto</h3>
-              <div className="relative">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full rounded-lg"
-                />
-                <canvas ref={canvasRef} className="hidden" />
-              </div>
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={capturePhoto}
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Capturar
-                </button>
-                <button
-                  onClick={closeCamera}
-                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Modal de Visualização de Mídia */}
         {selectedMedia && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -3795,5 +2087,19 @@ export default function InspecaoEletrica() {
     );
   }
 
-  return null;
+  // Renderização padrão para outras views (placeholder)
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <Settings className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-gray-500 text-lg">Funcionalidade em desenvolvimento</p>
+        <button
+          onClick={() => setCurrentView('home')}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Voltar ao Início
+        </button>
+      </div>
+    </div>
+  );
 }
