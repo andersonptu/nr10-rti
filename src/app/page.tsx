@@ -779,8 +779,13 @@ export default function InspecaoEletrica() {
   };
 
   const addAreaWithSelectedItems = () => {
-    if (!novaArea.trim() || !currentInspecao) {
+    if (!novaArea.trim()) {
       alert('Preencha o nome da área antes de continuar');
+      return;
+    }
+
+    if (!currentInspecao) {
+      alert('Erro: Nenhuma inspeção selecionada');
       return;
     }
 
