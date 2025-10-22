@@ -9,7 +9,7 @@ import {
   Navigation, Loader, Image, Edit, Search, Filter, Menu, X, ChevronDown, ChevronUp,
   Zap, AlertTriangle, Activity, Target, Layers, FileCheck, Users, Calendar as CalendarIcon,
   Briefcase, MapPin as LocationIcon, Clock as TimeIcon, Star, Award, TrendingDown,
-  BarChart, LineChart, Gauge, Thermometer, Battery, Power, Wifi, Signal, Link
+  BarChart, LineChart, Gauge, Thermometer, Battery, Power, Wifi, Signal, Link, WifiOff
 } from 'lucide-react';
 
 interface MediaFile {
@@ -313,11 +313,22 @@ export default function InspecaoEletrica() {
   const [currentInspecao, setCurrentInspecao] = useState<Inspecao | null>(null);
   const [currentArea, setCurrentArea] = useState<Area | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<MediaFile | null>(null);
-  const [cameraOpen, setCameraOpen] = useState<{ itemId: number } | null>(null);
+  const [cameraOpen, setCameraOpen] = useState<{ itemId: number; type: 'image' | 'video' } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+
+  // Estados para sistema de salvamento automático
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
+  const [pendingSyncData, setPendingSyncData] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const [localizacao, setLocalizacao] = useState<Localizacao | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
@@ -411,6 +422,157 @@ export default function InspecaoEletrica() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'Em Andamento' | 'Concluída' | 'Pendente'>('all');
 
+  // Funções do sistema de salvamento automático
+  const saveToLocalStorage = (data: any, key: string) => {
+    try {
+      const timestamp = new Date().toISOString();
+      const dataWithTimestamp = { ...data, lastSaved: timestamp };
+      localStorage.setItem(key, JSON.stringify(dataWithTimestamp));
+      console.log(`Dados salvos localmente: ${key}`);
+    } catch (error) {
+      console.error('Erro ao salvar no localStorage:', error);
+    }
+  };
+
+  const loadFromLocalStorage = (key: string) => {
+    try {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('Erro ao carregar do localStorage:', error);
+      return null;
+    }
+  };
+
+  const syncToCloud = async (data: any) => {
+    if (!isOnline) {
+      // Adicionar à fila de sincronização
+      setPendingSyncData(prev => [...prev, { data, timestamp: new Date().toISOString() }]);
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveStatus('saving');
+      
+      // Simular chamada para API/nuvem
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log('Dados sincronizados com a nuvem:', data);
+      setSaveStatus('saved');
+      setLastSaveTime(new Date());
+      
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('Erro ao sincronizar com a nuvem:', error);
+      setSaveStatus('error');
+      // Adicionar à fila para tentar novamente
+      setPendingSyncData(prev => [...prev, { data, timestamp: new Date().toISOString() }]);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const startAutoSave = () => {
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+    }
+
+    const timer = setInterval(() => {
+      if (currentInspecao && currentView === 'checklist') {
+        // Salvar dados da inspeção atual
+        const dataToSave = {
+          inspecao: currentInspecao,
+          area: currentArea,
+          timestamp: new Date().toISOString()
+        };
+
+        // Salvar localmente primeiro
+        saveToLocalStorage(dataToSave, `inspecao_${currentInspecao.id}`);
+        
+        // Tentar sincronizar com a nuvem
+        syncToCloud(dataToSave);
+      }
+    }, 60000); // 1 minuto
+
+    setAutoSaveTimer(timer);
+  };
+
+  const stopAutoSave = () => {
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+      setAutoSaveTimer(null);
+    }
+  };
+
+  const processPendingSync = async () => {
+    if (!isOnline || pendingSyncData.length === 0) return;
+
+    console.log(`Processando ${pendingSyncData.length} itens pendentes de sincronização...`);
+    
+    for (const item of pendingSyncData) {
+      try {
+        await syncToCloud(item.data);
+      } catch (error) {
+        console.error('Erro ao processar item pendente:', error);
+        break; // Para na primeira falha para não sobrecarregar
+      }
+    }
+    
+    // Limpar itens processados com sucesso
+    setPendingSyncData([]);
+  };
+
+  // Monitorar status online/offline
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      console.log('Conexão restaurada - processando sincronização pendente');
+      processPendingSync();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      console.log('Conexão perdida - salvamento apenas local');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [pendingSyncData]);
+
+  // Iniciar auto-save quando entrar no checklist
+  useEffect(() => {
+    if (currentView === 'checklist' && currentInspecao) {
+      startAutoSave();
+      console.log('Auto-save iniciado para inspeção:', currentInspecao.nome);
+    } else {
+      stopAutoSave();
+    }
+
+    return () => stopAutoSave();
+  }, [currentView, currentInspecao]);
+
+  // Carregar dados salvos ao inicializar
+  useEffect(() => {
+    const savedInspecoes = loadFromLocalStorage('inspecoes');
+    if (savedInspecoes && savedInspecoes.data) {
+      setInspecoes(savedInspecoes.data);
+      console.log('Inspeções carregadas do localStorage');
+    }
+  }, []);
+
+  // Salvar inspeções sempre que houver mudanças
+  useEffect(() => {
+    if (inspecoes.length > 0) {
+      saveToLocalStorage(inspecoes, 'inspecoes');
+    }
+  }, [inspecoes]);
+
   // Atualizar estatísticas do dashboard
   useEffect(() => {
     const stats: DashboardStats = {
@@ -480,6 +642,267 @@ export default function InspecaoEletrica() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  // Funções de mídia corrigidas
+  const startCamera = async (itemId: number, type: 'image' | 'video') => {
+    try {
+      const constraints = {
+        video: {
+          facingMode: 'environment', // Usar câmera traseira por padrão
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: type === 'video' // Incluir áudio apenas para vídeo
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+      
+      setCameraOpen({ itemId, type });
+    } catch (error) {
+      console.error('Erro ao acessar câmera:', error);
+      alert('Erro ao acessar a câmera. Verifique as permissões.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setCameraOpen(null);
+    setIsRecording(false);
+    setRecordedChunks([]);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current || !cameraOpen) return;
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const context = canvas.getContext('2d');
+
+    if (context) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          const mediaFile: MediaFile = {
+            id: Date.now().toString(),
+            file,
+            type: 'image',
+            url: URL.createObjectURL(blob),
+            name: file.name,
+            size: file.size
+          };
+          
+          addMediaToItem(cameraOpen.itemId, mediaFile);
+          stopCamera();
+        }
+      }, 'image/jpeg', 0.9);
+    }
+  };
+
+  const startVideoRecording = () => {
+    if (!streamRef.current || !cameraOpen) return;
+
+    try {
+      const recorder = new MediaRecorder(streamRef.current, {
+        mimeType: 'video/webm;codecs=vp9'
+      });
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          setRecordedChunks(prev => [...prev, event.data]);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const file = new File([blob], `video_${Date.now()}.webm`, { type: 'video/webm' });
+        const mediaFile: MediaFile = {
+          id: Date.now().toString(),
+          file,
+          type: 'video',
+          url: URL.createObjectURL(blob),
+          name: file.name,
+          size: file.size
+        };
+        
+        addMediaToItem(cameraOpen.itemId, mediaFile);
+        stopCamera();
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Erro ao iniciar gravação:', error);
+      alert('Erro ao iniciar gravação de vídeo.');
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const startAudioRecording = async (itemId: number) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (event) => {
+        chunks.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const file = new File([blob], `audio_${Date.now()}.webm`, { type: 'audio/webm' });
+        const mediaFile: MediaFile = {
+          id: Date.now().toString(),
+          file,
+          type: 'audio',
+          url: URL.createObjectURL(blob),
+          name: file.name,
+          size: file.size
+        };
+        
+        addMediaToItem(itemId, mediaFile);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      
+      // Parar gravação após 30 segundos ou quando usuário clicar novamente
+      setTimeout(() => {
+        if (recorder.state === 'recording') {
+          recorder.stop();
+        }
+      }, 30000);
+
+      // Salvar referência para poder parar manualmente
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Erro ao gravar áudio:', error);
+      alert('Erro ao acessar o microfone. Verifique as permissões.');
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+    }
+  };
+
+  const handleFileUpload = (itemId: number, type: 'image' | 'video' | 'audio') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    
+    // Definir tipos de arquivo aceitos baseado no tipo
+    switch (type) {
+      case 'image':
+        input.accept = 'image/*';
+        break;
+      case 'video':
+        input.accept = 'video/*';
+        break;
+      case 'audio':
+        input.accept = 'audio/*';
+        break;
+    }
+    
+    // Permitir acesso à câmera/galeria em dispositivos móveis
+    input.capture = type === 'image' ? 'environment' : type;
+
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const mediaFile: MediaFile = {
+          id: Date.now().toString(),
+          file,
+          type,
+          url: URL.createObjectURL(file),
+          name: file.name,
+          size: file.size
+        };
+        
+        addMediaToItem(itemId, mediaFile);
+      }
+    };
+
+    input.click();
+  };
+
+  const addMediaToItem = (itemId: number, mediaFile: MediaFile) => {
+    if (!currentInspecao || !currentArea) return;
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: currentInspecao.areas.map(area => 
+        area.id === currentArea.id 
+          ? {
+              ...area,
+              items: area.items.map(item => 
+                item.id === itemId 
+                  ? { ...item, medias: [...item.medias, mediaFile] }
+                  : item
+              ),
+              painelItems: area.painelItems?.map(item => 
+                item.id === itemId 
+                  ? { ...item, medias: [...item.medias, mediaFile] }
+                  : item
+              )
+            }
+          : area
+      )
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+  };
+
+  const removeMediaFromItem = (itemId: number, mediaId: string) => {
+    if (!currentInspecao || !currentArea) return;
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: currentInspecao.areas.map(area => 
+        area.id === currentArea.id 
+          ? {
+              ...area,
+              items: area.items.map(item => 
+                item.id === itemId 
+                  ? { ...item, medias: item.medias.filter(m => m.id !== mediaId) }
+                  : item
+              ),
+              painelItems: area.painelItems?.map(item => 
+                item.id === itemId 
+                  ? { ...item, medias: item.medias.filter(m => m.id !== mediaId) }
+                  : item
+              )
+            }
+          : area
+      )
+    };
+
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
   };
 
   const obterLocalizacao = () => {
@@ -730,6 +1153,49 @@ export default function InspecaoEletrica() {
     return matchesSearch && matchesFilter;
   });
 
+  // Componente de status de salvamento
+  const SaveStatus = () => {
+    if (currentView !== 'checklist' || !currentInspecao) return null;
+
+    return (
+      <div className="fixed top-4 right-4 z-50">
+        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
+          saveStatus === 'saving' ? 'bg-blue-100 text-blue-800' :
+          saveStatus === 'saved' ? 'bg-green-100 text-green-800' :
+          saveStatus === 'error' ? 'bg-red-100 text-red-800' :
+          'bg-gray-100 text-gray-600'
+        }`}>
+          {saveStatus === 'saving' && <Loader className="w-4 h-4 animate-spin" />}
+          {saveStatus === 'saved' && <CheckCircle className="w-4 h-4" />}
+          {saveStatus === 'error' && <AlertCircle className="w-4 h-4" />}
+          {saveStatus === 'idle' && <Save className="w-4 h-4" />}
+          
+          <span>
+            {saveStatus === 'saving' ? 'Salvando...' :
+             saveStatus === 'saved' ? 'Salvo' :
+             saveStatus === 'error' ? 'Erro ao salvar' :
+             'Auto-save ativo'}
+          </span>
+          
+          {!isOnline && <WifiOff className="w-4 h-4 text-orange-500" title="Offline - salvando localmente" />}
+          {isOnline && <Wifi className="w-4 h-4 text-green-500" title="Online" />}
+        </div>
+        
+        {lastSaveTime && (
+          <div className="text-xs text-gray-500 text-center mt-1">
+            Último salvamento: {lastSaveTime.toLocaleTimeString()}
+          </div>
+        )}
+        
+        {pendingSyncData.length > 0 && (
+          <div className="text-xs text-orange-600 text-center mt-1">
+            {pendingSyncData.length} item(s) aguardando sincronização
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ProfessionalHeader = ({ title, subtitle, showCompanyInfo = true }: { title: string; subtitle?: string; showCompanyInfo?: boolean }) => (
     <div className="bg-white border-l-4 border-orange-500 shadow-lg">
       <div className="bg-gradient-to-r from-blue-800 to-blue-900 text-white p-4 sm:p-6">
@@ -868,6 +1334,75 @@ export default function InspecaoEletrica() {
           </div>
           <Icon className="w-12 h-12 opacity-80" />
         </div>
+      </div>
+    );
+  };
+
+  // Modal da câmera
+  const CameraModal = () => {
+    if (!cameraOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
+          <div className="p-4 border-b flex items-center justify-between">
+            <h3 className="text-lg font-semibold">
+              {cameraOpen.type === 'image' ? 'Tirar Foto' : 'Gravar Vídeo'}
+            </h3>
+            <button
+              onClick={stopCamera}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="p-4">
+            <div className="relative bg-black rounded-lg overflow-hidden mb-4">
+              <video
+                ref={videoRef}
+                className="w-full h-64 object-cover"
+                autoPlay
+                muted
+                playsInline
+              />
+            </div>
+            
+            <div className="flex justify-center gap-4">
+              {cameraOpen.type === 'image' ? (
+                <button
+                  onClick={capturePhoto}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <Camera className="w-5 h-5" />
+                  Capturar Foto
+                </button>
+              ) : (
+                <>
+                  {!isRecording ? (
+                    <button
+                      onClick={startVideoRecording}
+                      className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                    >
+                      <Video className="w-5 h-5" />
+                      Iniciar Gravação
+                    </button>
+                  ) : (
+                    <button
+                      onClick={stopVideoRecording}
+                      className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+                    >
+                      <X className="w-5 h-5" />
+                      Parar Gravação
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <canvas ref={canvasRef} className="hidden" />
       </div>
     );
   };
@@ -1976,6 +2511,7 @@ export default function InspecaoEletrica() {
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     onChange={handleFotoClienteFileChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   />
@@ -2221,6 +2757,9 @@ export default function InspecaoEletrica() {
   if (currentView === 'checklist' && currentArea && currentInspecao) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
+        <SaveStatus />
+        <CameraModal />
+        
         <div className="max-w-7xl mx-auto">
           <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -2389,12 +2928,14 @@ export default function InspecaoEletrica() {
                             <div className="flex flex-col gap-2">
                               <div className="flex gap-1">
                                 <button
+                                  onClick={() => startCamera(item.id, 'image')}
                                   className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition-colors"
                                   title="Tirar Foto"
                                 >
                                   <Camera className="w-4 h-4" />
                                 </button>
                                 <button
+                                  onClick={() => handleFileUpload(item.id, 'image')}
                                   className="bg-green-600 text-white p-1 rounded hover:bg-green-700 transition-colors"
                                   title="Anexar Imagem"
                                 >
@@ -2403,18 +2944,25 @@ export default function InspecaoEletrica() {
                               </div>
                               <div className="flex gap-1">
                                 <button
+                                  onClick={() => startCamera(item.id, 'video')}
                                   className="bg-purple-600 text-white p-1 rounded hover:bg-purple-700 transition-colors"
                                   title="Gravar Vídeo"
                                 >
                                   <Video className="w-4 h-4" />
                                 </button>
                                 <button
-                                  className="bg-orange-600 text-white p-1 rounded hover:bg-orange-700 transition-colors"
-                                  title="Gravar Áudio"
+                                  onClick={() => isRecording ? stopAudioRecording() : startAudioRecording(item.id)}
+                                  className={`${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'} text-white p-1 rounded transition-colors`}
+                                  title={isRecording ? "Parar Gravação" : "Gravar Áudio"}
                                 >
                                   <Mic className="w-4 h-4" />
                                 </button>
                               </div>
+                              {item.medias.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {item.medias.length} arquivo(s)
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2481,12 +3029,14 @@ export default function InspecaoEletrica() {
                           <div className="flex flex-col gap-2">
                             <div className="flex gap-1">
                               <button
+                                onClick={() => startCamera(item.id, 'image')}
                                 className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition-colors"
                                 title="Tirar Foto"
                               >
                                 <Camera className="w-4 h-4" />
                               </button>
                               <button
+                                onClick={() => handleFileUpload(item.id, 'image')}
                                 className="bg-green-600 text-white p-1 rounded hover:bg-green-700 transition-colors"
                                 title="Anexar Imagem"
                               >
@@ -2495,18 +3045,25 @@ export default function InspecaoEletrica() {
                             </div>
                             <div className="flex gap-1">
                               <button
+                                onClick={() => startCamera(item.id, 'video')}
                                 className="bg-purple-600 text-white p-1 rounded hover:bg-purple-700 transition-colors"
                                 title="Gravar Vídeo"
                               >
                                 <Video className="w-4 h-4" />
                               </button>
                               <button
-                                className="bg-orange-600 text-white p-1 rounded hover:bg-orange-700 transition-colors"
-                                title="Gravar Áudio"
+                                onClick={() => isRecording ? stopAudioRecording() : startAudioRecording(item.id)}
+                                className={`${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'} text-white p-1 rounded transition-colors`}
+                                title={isRecording ? "Parar Gravação" : "Gravar Áudio"}
                               >
                                 <Mic className="w-4 h-4" />
                               </button>
                             </div>
+                            {item.medias.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {item.medias.length} arquivo(s)
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
