@@ -9,7 +9,7 @@ import {
   Navigation, Loader, Image, Edit, Search, Filter, Menu, X, ChevronDown, ChevronUp,
   Zap, AlertTriangle, Activity, Target, Layers, FileCheck, Users, Calendar as CalendarIcon,
   Briefcase, MapPin as LocationIcon, Clock as TimeIcon, Star, Award, TrendingDown,
-  BarChart, LineChart, Gauge, Thermometer, Battery, Power, Wifi, Signal
+  BarChart, LineChart, Gauge, Thermometer, Battery, Power, Wifi, Signal, Link
 } from 'lucide-react';
 
 interface MediaFile {
@@ -336,6 +336,13 @@ export default function InspecaoEletrica() {
   const [showNovaAreaForm, setShowNovaAreaForm] = useState(false);
   const [tipoChecklistSelecionado, setTipoChecklistSelecionado] = useState<'subestacoes' | 'paineis'>('subestacoes');
 
+  // Estados para foto do cliente
+  const [fotoClienteMetodo, setFotoClienteMetodo] = useState<'link' | 'upload'>('link');
+  const [fotoClienteLink, setFotoClienteLink] = useState('');
+  const [fotoClienteFile, setFotoClienteFile] = useState<File | null>(null);
+  const [fotoClientePreview, setFotoClientePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoSistema>({
     empresa: {
       nome: 'PA BRASIL AUTOMAÇÃO',
@@ -444,6 +451,37 @@ export default function InspecaoEletrica() {
     return imagemPadrao?.imagemPadrao || 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=300&fit=crop&q=80';
   };
 
+  // Funções para foto do cliente
+  const handleFotoClienteFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setFotoClienteFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFotoClientePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleFotoClienteLinkChange = (link: string) => {
+    setFotoClienteLink(link);
+    if (link) {
+      setFotoClientePreview(link);
+    } else {
+      setFotoClientePreview(null);
+    }
+  };
+
+  const removeFotoCliente = () => {
+    setFotoClienteFile(null);
+    setFotoClienteLink('');
+    setFotoClientePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const obterLocalizacao = () => {
     setLoadingLocation(true);
     setLocationError(null);
@@ -512,6 +550,14 @@ export default function InspecaoEletrica() {
 
     const numeroSequencial = `PA-${new Date().getFullYear()}-${(inspecoes.length + 1).toString().padStart(4, '0')}`;
 
+    // Determinar a foto do cliente baseada no método selecionado
+    let logoClienteFinal = '';
+    if (fotoClienteMetodo === 'link' && fotoClienteLink) {
+      logoClienteFinal = fotoClienteLink;
+    } else if (fotoClienteMetodo === 'upload' && fotoClientePreview) {
+      logoClienteFinal = fotoClientePreview;
+    }
+
     const inspecao: Inspecao = {
       id: Date.now().toString(),
       nome: novaInspecao.nome,
@@ -524,7 +570,7 @@ export default function InspecaoEletrica() {
       status: 'Em Andamento',
       createdAt: new Date().toISOString(),
       localizacao: localizacao || undefined,
-      logoCliente: novaInspecao.logoCliente || undefined
+      logoCliente: logoClienteFinal || undefined
     };
 
     setInspecoes(prev => [...prev, inspecao]);
@@ -539,6 +585,9 @@ export default function InspecaoEletrica() {
       data: new Date().toISOString().split('T')[0],
       logoCliente: ''
     });
+
+    // Limpar foto do cliente
+    removeFotoCliente();
 
     alert(`Inspeção criada com sucesso!\nNúmero sequencial: ${numeroSequencial}`);
   };
@@ -1869,23 +1918,95 @@ export default function InspecaoEletrica() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Logo do Cliente (Opcional)
-                </label>
-                <input
-                  type="url"
-                  value={novaInspecao.logoCliente}
-                  onChange={(e) => setNovaInspecao(prev => ({ ...prev, logoCliente: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="https://exemplo.com/logo.png"
-                />
-              </div>
             </div>
           </NumberedSection>
 
-          <NumberedSection number="2" title="LOCALIZAÇÃO (OPCIONAL)">
+          <NumberedSection number="2" title="FOTO DO CLIENTE">
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="fotoMetodo"
+                      value="link"
+                      checked={fotoClienteMetodo === 'link'}
+                      onChange={(e) => setFotoClienteMetodo(e.target.value as 'link' | 'upload')}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <Link className="w-4 h-4" />
+                    <span className="text-sm font-medium text-gray-700">Link da Imagem</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="fotoMetodo"
+                      value="upload"
+                      checked={fotoClienteMetodo === 'upload'}
+                      onChange={(e) => setFotoClienteMetodo(e.target.value as 'link' | 'upload')}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <Upload className="w-4 h-4" />
+                    <span className="text-sm font-medium text-gray-700">Upload de Arquivo</span>
+                  </label>
+                </div>
+              </div>
+
+              {fotoClienteMetodo === 'link' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    URL da Foto do Cliente
+                  </label>
+                  <input
+                    type="url"
+                    value={fotoClienteLink}
+                    onChange={(e) => handleFotoClienteLinkChange(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="https://exemplo.com/logo-cliente.png"
+                  />
+                </div>
+              )}
+
+              {fotoClienteMetodo === 'upload' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selecionar Arquivo
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFotoClienteFileChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+              )}
+
+              {fotoClientePreview && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-gray-700">Preview da Foto do Cliente</h4>
+                    <button
+                      onClick={removeFotoCliente}
+                      className="text-red-600 hover:text-red-800 p-1"
+                      title="Remover foto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="w-32 h-32 bg-white rounded-lg border-2 border-gray-200 overflow-hidden">
+                    <img
+                      src={fotoClientePreview}
+                      alt="Preview da foto do cliente"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </NumberedSection>
+
+          <NumberedSection number="3" title="LOCALIZAÇÃO (OPCIONAL)">
             <div className="bg-gray-50 p-6 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -2138,6 +2259,7 @@ export default function InspecaoEletrica() {
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">HRN</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendações</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -2161,7 +2283,7 @@ export default function InspecaoEletrica() {
                             <select
                               value={item.condicao}
                               onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
                             >
                               <option value="">-</option>
                               <option value="C">C</option>
@@ -2172,9 +2294,11 @@ export default function InspecaoEletrica() {
 
                           <td className="px-4 py-4 text-center">
                             <select
-                              value={item.po}
+                              value={item.po || ''}
                               onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value)}
-                              className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
+                              }`}
                               disabled={item.condicao !== 'NC'}
                             >
                               {PO_OPTIONS.map(option => (
@@ -2187,9 +2311,11 @@ export default function InspecaoEletrica() {
 
                           <td className="px-4 py-4 text-center">
                             <select
-                              value={item.fe}
+                              value={item.fe || ''}
                               onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value)}
-                              className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
+                              }`}
                               disabled={item.condicao !== 'NC'}
                             >
                               {FE_OPTIONS.map(option => (
@@ -2202,9 +2328,11 @@ export default function InspecaoEletrica() {
 
                           <td className="px-4 py-4 text-center">
                             <select
-                              value={item.gsd}
+                              value={item.gsd || ''}
                               onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value)}
-                              className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
+                              }`}
                               disabled={item.condicao !== 'NC'}
                             >
                               {GSD_OPTIONS.map(option => (
@@ -2217,9 +2345,11 @@ export default function InspecaoEletrica() {
 
                           <td className="px-4 py-4 text-center">
                             <select
-                              value={item.nper}
+                              value={item.nper || ''}
                               onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value)}
-                              className="w-32 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
+                              }`}
                               disabled={item.condicao !== 'NC'}
                             >
                               {NPER_OPTIONS.map(option => (
@@ -2254,6 +2384,39 @@ export default function InspecaoEletrica() {
                               rows={2}
                             />
                           </td>
+
+                          <td className="px-4 py-4 text-center">
+                            <div className="flex flex-col gap-2">
+                              <div className="flex gap-1">
+                                <button
+                                  className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition-colors"
+                                  title="Tirar Foto"
+                                >
+                                  <Camera className="w-4 h-4" />
+                                </button>
+                                <button
+                                  className="bg-green-600 text-white p-1 rounded hover:bg-green-700 transition-colors"
+                                  title="Anexar Imagem"
+                                >
+                                  <Image className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  className="bg-purple-600 text-white p-1 rounded hover:bg-purple-700 transition-colors"
+                                  title="Gravar Vídeo"
+                                >
+                                  <Video className="w-4 h-4" />
+                                </button>
+                                <button
+                                  className="bg-orange-600 text-white p-1 rounded hover:bg-orange-700 transition-colors"
+                                  title="Gravar Áudio"
+                                >
+                                  <Mic className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -2269,6 +2432,7 @@ export default function InspecaoEletrica() {
                       <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Condição</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Observação</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendação</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -2287,7 +2451,7 @@ export default function InspecaoEletrica() {
                           <select
                             value={item.condicao}
                             onChange={(e) => updatePainelItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
                           >
                             <option value="">-</option>
                             <option value="C">C</option>
@@ -2312,6 +2476,38 @@ export default function InspecaoEletrica() {
                             className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                             rows={2}
                           />
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex gap-1">
+                              <button
+                                className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition-colors"
+                                title="Tirar Foto"
+                              >
+                                <Camera className="w-4 h-4" />
+                              </button>
+                              <button
+                                className="bg-green-600 text-white p-1 rounded hover:bg-green-700 transition-colors"
+                                title="Anexar Imagem"
+                              >
+                                <Image className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="flex gap-1">
+                              <button
+                                className="bg-purple-600 text-white p-1 rounded hover:bg-purple-700 transition-colors"
+                                title="Gravar Vídeo"
+                              >
+                                <Video className="w-4 h-4" />
+                              </button>
+                              <button
+                                className="bg-orange-600 text-white p-1 rounded hover:bg-orange-700 transition-colors"
+                                title="Gravar Áudio"
+                              >
+                                <Mic className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ))}
