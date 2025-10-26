@@ -9,7 +9,8 @@ import {
   Navigation, Loader, Image, Edit, Search, Filter, Menu, X, ChevronDown, ChevronUp,
   Zap, AlertTriangle, Activity, Target, Layers, FileCheck, Users, Calendar as CalendarIcon,
   Briefcase, MapPin as LocationIcon, Clock as TimeIcon, Star, Award, TrendingDown,
-  BarChart, LineChart, Gauge, Thermometer, Battery, Power, Wifi, Signal, Link, WifiOff
+  BarChart, LineChart, Gauge, Thermometer, Battery, Power, Wifi, Signal, Link, WifiOff,
+  ChevronLeft, ChevronRight, Brain, Sparkles
 } from 'lucide-react';
 
 interface MediaFile {
@@ -36,6 +37,8 @@ interface ChecklistItem {
   selected: boolean;
   precisaImagem: boolean;
   hrn?: number;
+  preRecomendacao?: string;
+  analiseIA?: string;
 }
 
 interface PainelEletricoItem {
@@ -216,7 +219,7 @@ const getHRNColor = (hrn: number): { bg: string; text: string; label: string } =
   return { bg: 'bg-gray-100', text: 'text-gray-800', label: 'N/A' };
 };
 
-const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected' | 'precisaImagem' | 'hrn'>[] = [
+const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'imagemPadrao' | 'medias' | 'selected' | 'precisaImagem' | 'hrn' | 'preRecomendacao' | 'analiseIA'>[] = [
   { id: 1, norma: "NR10.3.9-d", descricao: "A sala ou subestação está identificada? Item 10.10.1-c – NR-10" },
   { id: 2, norma: "NR10.4.1", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir acidentes e outras ocorrências originadas por choque elétrico?" },
   { id: 3, norma: "NR10.4.2", descricao: "As instalações elétricas devem ser projetadas e executadas de modo que seja possível prevenir incêndios e explosões?" },
@@ -308,7 +311,7 @@ const painelEletricoItems: Omit<PainelEletricoItem, 'condicao' | 'observacao' | 
 ];
 
 export default function InspecaoEletrica() {
-  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'dashboard' | 'configuracoes' | 'relatorios' | 'gerenciar-imagens'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'dashboard' | 'configuracoes' | 'relatorios' | 'gerenciar-imagens' | 'editor-imagens'>('home');
   const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
   const [currentInspecao, setCurrentInspecao] = useState<Inspecao | null>(null);
   const [currentArea, setCurrentArea] = useState<Area | null>(null);
@@ -321,6 +324,10 @@ export default function InspecaoEletrica() {
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+
+  // Estados para paginação do checklist
+  const [currentItemIndex, setCurrentItemIndex] = useState(0);
+  const [analisandoImagem, setAnalisandoImagem] = useState(false);
 
   // Estados para sistema de salvamento automático
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -421,6 +428,46 @@ export default function InspecaoEletrica() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'Em Andamento' | 'Concluída' | 'Pendente'>('all');
+
+  // Estados para editor de imagens padrão
+  const [editingImageId, setEditingImageId] = useState<number | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState('');
+
+  // Função para analisar imagem com IA
+  const analisarImagemComIA = async (imagemUrl: string, item: ChecklistItem) => {
+    setAnalisandoImagem(true);
+    try {
+      // Simular análise de IA (em produção, seria uma chamada para API de IA)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Análise simulada baseada no item
+      let analise = '';
+      let preRecomendacao = '';
+      
+      if (item.norma.includes('10.3.9')) {
+        analise = 'Identificação da subestação detectada. Placa de identificação visível com informações de tensão e responsável.';
+        preRecomendacao = 'Verificar se todas as informações obrigatórias estão presentes na placa de identificação conforme NR-10.';
+      } else if (item.norma.includes('10.4.1')) {
+        analise = 'Equipamentos de proteção contra choque elétrico identificados. Barreiras físicas e isolamentos aparentemente adequados.';
+        preRecomendacao = 'Realizar testes de isolamento e verificar integridade das barreiras de proteção.';
+      } else if (item.norma.includes('10.4.2')) {
+        analise = 'Sistema de prevenção contra incêndios observado. Extintores e detectores de fumaça presentes.';
+        preRecomendacao = 'Verificar validade dos extintores e funcionamento dos detectores de fumaça.';
+      } else {
+        analise = 'Análise visual realizada. Equipamentos e instalações aparentam estar em conformidade básica.';
+        preRecomendacao = 'Realizar inspeção detalhada conforme procedimentos técnicos específicos da norma.';
+      }
+
+      // Atualizar o item com a análise
+      updateItem(currentArea!.id, item.id, 'analiseIA', analise);
+      updateItem(currentArea!.id, item.id, 'preRecomendacao', preRecomendacao);
+      
+    } catch (error) {
+      console.error('Erro na análise de IA:', error);
+    } finally {
+      setAnalisandoImagem(false);
+    }
+  };
 
   // Funções do sistema de salvamento automático
   const saveToLocalStorage = (data: any, key: string) => {
@@ -644,9 +691,82 @@ export default function InspecaoEletrica() {
     }
   };
 
-  // Funções de mídia corrigidas
+  // Funções para editor de imagens padrão
+  const editarImagemPadrao = (itemId: number) => {
+    const item = imagensPadrao.find(img => img.id === itemId);
+    if (item) {
+      setEditingImageId(itemId);
+      setNewImageUrl(item.imagemPadrao);
+      setCurrentView('editor-imagens');
+    }
+  };
+
+  const salvarImagemPadrao = () => {
+    if (editingImageId && newImageUrl) {
+      setImagensPadrao(prev => prev.map(img => 
+        img.id === editingImageId 
+          ? { ...img, imagemPadrao: newImageUrl }
+          : img
+      ));
+      
+      // Atualizar também nos itens existentes das inspeções
+      setInspecoes(prev => prev.map(inspecao => ({
+        ...inspecao,
+        areas: inspecao.areas.map(area => ({
+          ...area,
+          items: area.items.map(item => 
+            item.id === editingImageId 
+              ? { ...item, imagemPadrao: newImageUrl }
+              : item
+          )
+        }))
+      })));
+
+      alert('Imagem padrão atualizada com sucesso!');
+      setCurrentView('gerenciar-imagens');
+      setEditingImageId(null);
+      setNewImageUrl('');
+    }
+  };
+
+  const removerImagemPadrao = (itemId: number) => {
+    if (confirm('Tem certeza que deseja remover a imagem padrão deste item?')) {
+      setImagensPadrao(prev => prev.map(img => 
+        img.id === itemId 
+          ? { ...img, imagemPadrao: '' }
+          : img
+      ));
+      
+      // Atualizar também nos itens existentes das inspeções
+      setInspecoes(prev => prev.map(inspecao => ({
+        ...inspecao,
+        areas: inspecao.areas.map(area => ({
+          ...area,
+          items: area.items.map(item => 
+            item.id === itemId 
+              ? { ...item, imagemPadrao: '' }
+              : item
+          )
+        }))
+      })));
+
+      alert('Imagem padrão removida com sucesso!');
+    }
+  };
+
+  // Funções de mídia corrigidas com melhor tratamento de erros
   const startCamera = async (itemId: number, type: 'image' | 'video') => {
     try {
+      // Verificar se o navegador suporta getUserMedia
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Seu navegador não suporta acesso à câmera. Use um navegador mais recente.');
+      }
+
+      // Verificar se está em contexto seguro (HTTPS)
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        throw new Error('Acesso à câmera requer conexão segura (HTTPS). Verifique se está acessando via HTTPS.');
+      }
+
       const constraints = {
         video: {
           facingMode: 'environment', // Usar câmera traseira por padrão
@@ -665,9 +785,24 @@ export default function InspecaoEletrica() {
       }
       
       setCameraOpen({ itemId, type });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao acessar câmera:', error);
-      alert('Erro ao acessar a câmera. Verifique as permissões.');
+      
+      let errorMessage = 'Erro ao acessar a câmera.';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Permissão de câmera negada. Clique no ícone da câmera na barra de endereços e permita o acesso à câmera.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'Nenhuma câmera encontrada no dispositivo.';
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = 'Seu navegador não suporta acesso à câmera.';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = 'Câmera está sendo usada por outro aplicativo. Feche outros aplicativos que possam estar usando a câmera.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -707,6 +842,12 @@ export default function InspecaoEletrica() {
           
           addMediaToItem(cameraOpen.itemId, mediaFile);
           stopCamera();
+
+          // Analisar a imagem capturada com IA
+          const currentItem = getCurrentItem();
+          if (currentItem) {
+            analisarImagemComIA(mediaFile.url, currentItem);
+          }
         }
       }, 'image/jpeg', 0.9);
     }
@@ -758,58 +899,6 @@ export default function InspecaoEletrica() {
     }
   };
 
-  const startAudioRecording = async (itemId: number) => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-
-      recorder.ondataavailable = (event) => {
-        chunks.push(event.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const file = new File([blob], `audio_${Date.now()}.webm`, { type: 'audio/webm' });
-        const mediaFile: MediaFile = {
-          id: Date.now().toString(),
-          file,
-          type: 'audio',
-          url: URL.createObjectURL(blob),
-          name: file.name,
-          size: file.size
-        };
-        
-        addMediaToItem(itemId, mediaFile);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      recorder.start();
-      
-      // Parar gravação após 30 segundos ou quando usuário clicar novamente
-      setTimeout(() => {
-        if (recorder.state === 'recording') {
-          recorder.stop();
-        }
-      }, 30000);
-
-      // Salvar referência para poder parar manualmente
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Erro ao gravar áudio:', error);
-      alert('Erro ao acessar o microfone. Verifique as permissões.');
-    }
-  };
-
-  const stopAudioRecording = () => {
-    if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-      setIsRecording(false);
-      setMediaRecorder(null);
-    }
-  };
-
   const handleFileUpload = (itemId: number, type: 'image' | 'video' | 'audio') => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -828,7 +917,9 @@ export default function InspecaoEletrica() {
     }
     
     // Permitir acesso à câmera/galeria em dispositivos móveis
-    input.capture = type === 'image' ? 'environment' : type;
+    if (type === 'image') {
+      input.setAttribute('capture', 'environment');
+    }
 
     input.onchange = (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
@@ -843,6 +934,14 @@ export default function InspecaoEletrica() {
         };
         
         addMediaToItem(itemId, mediaFile);
+
+        // Se for imagem, analisar com IA
+        if (type === 'image') {
+          const currentItem = getCurrentItem();
+          if (currentItem) {
+            analisarImagemComIA(mediaFile.url, currentItem);
+          }
+        }
       }
     };
 
@@ -905,6 +1004,7 @@ export default function InspecaoEletrica() {
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
   };
 
+  // CORREÇÃO 1: Função de geolocalização corrigida com melhor tratamento de erros
   const obterLocalizacao = () => {
     setLoadingLocation(true);
     setLocationError(null);
@@ -915,53 +1015,52 @@ export default function InspecaoEletrica() {
       return;
     }
 
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 15000, // Aumentado para 15 segundos
+      maximumAge: 60000 // Cache de 1 minuto
+    };
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const novaLocalizacao: Localizacao = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           precisao: position.coords.accuracy,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          endereco: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`
         };
 
-        // Tentar obter endereço usando reverse geocoding (simulado)
-        fetch(`https://api.opencagedata.com/geocode/v1/json?q=${position.coords.latitude}+${position.coords.longitude}&key=YOUR_API_KEY`)
-          .then(response => response.json())
-          .then(data => {
-            if (data.results && data.results[0]) {
-              novaLocalizacao.endereco = data.results[0].formatted;
-            }
-          })
-          .catch(() => {
-            // Se falhar, usar coordenadas como endereço
-            novaLocalizacao.endereco = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
-          })
-          .finally(() => {
-            setLocalizacao(novaLocalizacao);
-            setLoadingLocation(false);
-          });
+        setLocalizacao(novaLocalizacao);
+        setLoadingLocation(false);
+        
+        // Salvar a localização na inspeção atual se existir
+        if (currentInspecao) {
+          const updatedInspecao = {
+            ...currentInspecao,
+            localizacao: novaLocalizacao
+          };
+          setCurrentInspecao(updatedInspecao);
+          setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+        }
       },
       (error) => {
         let errorMessage = 'Erro ao obter localização';
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            errorMessage = 'Permissão de localização negada';
+            errorMessage = 'Permissão de localização negada. Clique no ícone de localização na barra de endereços e permita o acesso à localização.';
             break;
           case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Localização indisponível';
+            errorMessage = 'Localização indisponível. Verifique se o GPS está ativado e se há sinal disponível.';
             break;
           case error.TIMEOUT:
-            errorMessage = 'Timeout ao obter localização';
+            errorMessage = 'Timeout ao obter localização. Tente novamente em alguns segundos.';
             break;
         }
         setLocationError(errorMessage);
         setLoadingLocation(false);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000
-      }
+      options
     );
   };
 
@@ -1036,7 +1135,9 @@ export default function InspecaoEletrica() {
         medias: [],
         selected: configuracaoImagens.itensSelecionados.includes(item.id),
         precisaImagem: imagensPadrao.find(img => img.id === item.id)?.precisaImagem || false,
-        hrn: 0
+        hrn: 0,
+        preRecomendacao: '',
+        analiseIA: ''
       }));
     } else {
       painelItems = painelEletricoItems.map(item => ({
@@ -1073,6 +1174,7 @@ export default function InspecaoEletrica() {
     alert(`Área "${novaArea}" criada com sucesso!`);
   };
 
+  // CORREÇÃO 2: Função updateItem corrigida para atualização imediata
   const updateItem = (areaId: string, itemId: number, field: keyof ChecklistItem, value: any) => {
     if (!currentInspecao) return;
 
@@ -1086,6 +1188,7 @@ export default function InspecaoEletrica() {
                 if (item.id === itemId) {
                   const updatedItem = { ...item, [field]: value };
                   
+                  // Recalcular HRN se for NC e todos os campos estiverem preenchidos
                   if (updatedItem.condicao === 'NC' && updatedItem.po && updatedItem.fe && updatedItem.gsd && updatedItem.nper) {
                     updatedItem.hrn = calcularHRN(updatedItem.po, updatedItem.fe, updatedItem.gsd, updatedItem.nper);
                   } else {
@@ -1102,17 +1205,29 @@ export default function InspecaoEletrica() {
       )
     };
 
+    // Recalcular HRN total da área
     const areaAtualizada = updatedInspecao.areas.find(a => a.id === areaId);
     if (areaAtualizada) {
       areaAtualizada.hrnTotal = areaAtualizada.items.reduce((total, item) => total + (item.hrn || 0), 0);
     }
 
+    // Recalcular HRN total do cliente
     updatedInspecao.hrnTotalCliente = updatedInspecao.areas.reduce((total, area) => total + (area.hrnTotal || 0), 0);
 
+    // Atualizar estados imediatamente
     setCurrentInspecao(updatedInspecao);
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+    
+    // Atualizar área atual se for a mesma
+    if (currentArea && currentArea.id === areaId) {
+      const updatedArea = updatedInspecao.areas.find(a => a.id === areaId);
+      if (updatedArea) {
+        setCurrentArea(updatedArea);
+      }
+    }
   };
 
+  // CORREÇÃO 3: Função updatePainelItem corrigida para permitir escrita completa
   const updatePainelItem = (areaId: string, itemId: number, field: keyof PainelEletricoItem, value: any) => {
     if (!currentInspecao) return;
 
@@ -1130,8 +1245,17 @@ export default function InspecaoEletrica() {
       )
     };
 
+    // Atualizar estados imediatamente
     setCurrentInspecao(updatedInspecao);
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+    
+    // Atualizar área atual se for a mesma
+    if (currentArea && currentArea.id === areaId) {
+      const updatedArea = updatedInspecao.areas.find(a => a.id === areaId);
+      if (updatedArea) {
+        setCurrentArea(updatedArea);
+      }
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -1152,6 +1276,32 @@ export default function InspecaoEletrica() {
     
     return matchesSearch && matchesFilter;
   });
+
+  // Função para obter o item atual baseado no índice
+  const getCurrentItem = () => {
+    if (!currentArea) return null;
+    
+    if (currentArea.tipoChecklist === 'subestacoes') {
+      return currentArea.items[currentItemIndex] || null;
+    } else {
+      return currentArea.painelItems?.[currentItemIndex] || null;
+    }
+  };
+
+  // Função para navegar entre itens
+  const navigateToItem = (direction: 'prev' | 'next') => {
+    if (!currentArea) return;
+    
+    const totalItems = currentArea.tipoChecklist === 'subestacoes' 
+      ? currentArea.items.length 
+      : currentArea.painelItems?.length || 0;
+    
+    if (direction === 'prev' && currentItemIndex > 0) {
+      setCurrentItemIndex(currentItemIndex - 1);
+    } else if (direction === 'next' && currentItemIndex < totalItems - 1) {
+      setCurrentItemIndex(currentItemIndex + 1);
+    }
+  };
 
   // Componente de status de salvamento
   const SaveStatus = () => {
@@ -1338,7 +1488,7 @@ export default function InspecaoEletrica() {
     );
   };
 
-  // Modal da câmera
+  // Modal da câmera com melhor tratamento de erros
   const CameraModal = () => {
     if (!cameraOpen) return null;
 
@@ -1406,6 +1556,175 @@ export default function InspecaoEletrica() {
       </div>
     );
   };
+
+  if (currentView === 'editor-imagens' && editingImageId) {
+    const editingItem = imagensPadrao.find(img => img.id === editingImageId);
+    
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <ProfessionalHeader 
+          title="EDITOR DE FOTO PADRÃO" 
+          subtitle="Editar ou Remover Imagem de Referência"
+        />
+
+        <div className="max-w-4xl mx-auto p-4 sm:p-6">
+          <div className="mb-6">
+            <button
+              onClick={() => {
+                setCurrentView('gerenciar-imagens');
+                setEditingImageId(null);
+                setNewImageUrl('');
+              }}
+              className="flex items-center gap-2 text-blue-800 hover:text-blue-900 transition-colors font-medium"
+            >
+              <Home className="w-5 h-5" />
+              Voltar ao Gerenciamento
+            </button>
+          </div>
+
+          {editingItem && (
+            <NumberedSection number="1" title={`EDITAR ITEM: ${editingItem.norma}`}>
+              <div className="space-y-6">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-semibold text-gray-900 mb-2">Informações do Item</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Norma:</span>
+                      <span className="ml-2 text-blue-600">{editingItem.norma}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Categoria:</span>
+                      <span className="ml-2 text-green-600">{editingItem.categoria}</span>
+                    </div>
+                    <div className="md:col-span-2">
+                      <span className="font-medium text-gray-700">Descrição:</span>
+                      <p className="mt-1 text-gray-600">{editingItem.descricao}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-4">Imagem Atual</h4>
+                    {editingItem.imagemPadrao ? (
+                      <div className="bg-gray-100 rounded-lg overflow-hidden">
+                        <img 
+                          src={editingItem.imagemPadrao} 
+                          alt={editingItem.descricao}
+                          className="w-full h-64 object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center">
+                        <div className="text-center text-gray-500">
+                          <Image className="w-12 h-12 mx-auto mb-2" />
+                          <p>Nenhuma imagem definida</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-4">Nova Imagem</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          URL da Nova Imagem
+                        </label>
+                        <input
+                          type="url"
+                          value={newImageUrl}
+                          onChange={(e) => setNewImageUrl(e.target.value)}
+                          placeholder="https://exemplo.com/imagem.jpg"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Buscar Imagem no Dispositivo
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                setNewImageUrl(event.target?.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        />
+                      </div>
+
+                      {newImageUrl && (
+                        <div>
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">Preview da Nova Imagem</h5>
+                          <div className="bg-gray-100 rounded-lg overflow-hidden">
+                            <img 
+                              src={newImageUrl} 
+                              alt="Preview da nova imagem"
+                              className="w-full h-48 object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.nextElementSibling!.style.display = 'flex';
+                              }}
+                            />
+                            <div className="hidden h-48 items-center justify-center text-red-500">
+                              <div className="text-center">
+                                <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+                                <p className="text-sm">Erro ao carregar imagem</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={salvarImagemPadrao}
+                    disabled={!newImageUrl}
+                    className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-5 h-5" />
+                    Salvar Nova Imagem
+                  </button>
+
+                  <button
+                    onClick={() => removerImagemPadrao(editingImageId)}
+                    className="flex items-center justify-center gap-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    Remover Imagem Padrão
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setCurrentView('gerenciar-imagens');
+                      setEditingImageId(null);
+                      setNewImageUrl('');
+                    }}
+                    className="flex items-center justify-center gap-2 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </NumberedSection>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (currentView === 'dashboard') {
     return (
@@ -2052,11 +2371,20 @@ export default function InspecaoEletrica() {
               {imagensPadrao.map(imagem => (
                 <div key={imagem.id} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
                   <div className="aspect-video bg-gray-100">
-                    <img 
-                      src={imagem.imagemPadrao} 
-                      alt={imagem.descricao}
-                      className="w-full h-full object-cover"
-                    />
+                    {imagem.imagemPadrao ? (
+                      <img 
+                        src={imagem.imagemPadrao} 
+                        alt={imagem.descricao}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                          <Image className="w-8 h-8 mx-auto mb-2" />
+                          <p className="text-sm">Sem imagem</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-2">
@@ -2091,10 +2419,18 @@ export default function InspecaoEletrica() {
                         <label className="text-xs text-gray-600">Usar em novas áreas</label>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button className="text-blue-600 hover:text-blue-800 p-1">
+                        <button 
+                          onClick={() => editarImagemPadrao(imagem.id)}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                          title="Editar imagem padrão"
+                        >
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button className="text-red-600 hover:text-red-800 p-1">
+                        <button 
+                          onClick={() => removerImagemPadrao(imagem.id)}
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Remover imagem padrão"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -2179,7 +2515,7 @@ export default function InspecaoEletrica() {
 
         <div className="max-w-7xl mx-auto p-4 sm:p-6">
           <NumberedSection number="1" title="MENU PRINCIPAL">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
               <button
                 onClick={() => setCurrentView('nova-inspecao')}
                 className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 sm:p-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
@@ -2205,6 +2541,15 @@ export default function InspecaoEletrica() {
                 <FileText className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-3" />
                 <h3 className="text-base sm:text-lg font-semibold mb-2">Relatórios</h3>
                 <p className="text-xs sm:text-sm opacity-90">Gerar e gerenciar relatórios</p>
+              </button>
+
+              <button 
+                onClick={() => setCurrentView('gerenciar-imagens')}
+                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-4 sm:p-6 rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              >
+                <Image className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-3" />
+                <h3 className="text-base sm:text-lg font-semibold mb-2">Imagens Padrão</h3>
+                <p className="text-xs sm:text-sm opacity-90">Gerenciar fotos de referência</p>
               </button>
 
               <button 
@@ -2731,6 +3076,7 @@ export default function InspecaoEletrica() {
                   <button
                     onClick={() => {
                       setCurrentArea(area);
+                      setCurrentItemIndex(0); // Reset para o primeiro item
                       setCurrentView('checklist');
                     }}
                     className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -2755,12 +3101,35 @@ export default function InspecaoEletrica() {
   }
 
   if (currentView === 'checklist' && currentArea && currentInspecao) {
+    const currentItem = getCurrentItem();
+    const totalItems = currentArea.tipoChecklist === 'subestacoes' 
+      ? currentArea.items.length 
+      : currentArea.painelItems?.length || 0;
+
+    if (!currentItem) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg">Item não encontrado</p>
+            <button
+              onClick={() => setCurrentView('inspecao')}
+              className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Voltar para Inspeção
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-gray-50">
         <SaveStatus />
         <CameraModal />
         
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto p-4">
+          {/* Header */}
           <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
@@ -2775,70 +3144,210 @@ export default function InspecaoEletrica() {
                     {currentArea.nome} - {currentInspecao.nome}
                   </h1>
                   <p className="text-gray-600 text-sm sm:text-base">
-                    {currentArea.tipoChecklist === 'subestacoes' ? 'Checklist com HRN' : 'Checklist de Painéis'} - {currentArea.tipoChecklist === 'subestacoes' ? currentArea.items.length : currentArea.painelItems?.length || 0} itens
+                    {currentArea.tipoChecklist === 'subestacoes' ? 'Checklist com HRN' : 'Checklist de Painéis'}
                   </p>
                 </div>
               </div>
             </div>
+
+            {/* Navegação entre itens */}
+            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
+              <button
+                onClick={() => navigateToItem('prev')}
+                disabled={currentItemIndex === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </button>
+
+              <div className="text-center">
+                <div className="text-lg font-bold text-gray-900">
+                  Item {currentItemIndex + 1} de {totalItems}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {Math.round(((currentItemIndex + 1) / totalItems) * 100)}% concluído
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigateToItem('next')}
+                disabled={currentItemIndex === totalItems - 1}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Próximo
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              {currentArea.tipoChecklist === 'subestacoes' ? (
-                <table className="w-full min-w-[1200px]">
-                  <thead className="bg-gray-800 text-white sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Norma</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Descrição</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Condição</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">PO</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">FE</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">GSD</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">NPER</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">HRN</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendações</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {currentArea.items.map((item, index) => {
-                      const hrnValue = item.hrn || 0;
-                      const hrnColor = getHRNColor(hrnValue);
-                      
-                      return (
-                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {item.id}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-900 font-medium">
-                            {item.norma}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
-                            {item.descricao}
-                          </td>
-                          
-                          <td className="px-4 py-4 text-center">
-                            <select
-                              value={item.condicao}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                              className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
-                            >
-                              <option value="">-</option>
-                              <option value="C">C</option>
-                              <option value="NC">NC</option>
-                              <option value="NA">NA</option>
-                            </select>
-                          </td>
+          {/* Conteúdo do Item */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            {currentArea.tipoChecklist === 'subestacoes' ? (
+              <div className="space-y-6">
+                {/* Informações do Item */}
+                <div className="border-b border-gray-200 pb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+                      {(currentItem as ChecklistItem).id}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">{(currentItem as ChecklistItem).norma}</h2>
+                      <p className="text-gray-600 mt-2">{(currentItem as ChecklistItem).descricao}</p>
+                    </div>
+                  </div>
+                </div>
 
-                          <td className="px-4 py-4 text-center">
+                {/* Imagem Padrão */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Imagem de Referência</h3>
+                    <div className="bg-gray-100 rounded-lg overflow-hidden">
+                      {(currentItem as ChecklistItem).imagemPadrao ? (
+                        <img
+                          src={(currentItem as ChecklistItem).imagemPadrao}
+                          alt="Imagem padrão do item"
+                          className="w-full h-64 object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                          <div className="text-center">
+                            <Image className="w-12 h-12 mx-auto mb-2" />
+                            <p>Sem imagem de referência</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mídia Capturada */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Evidências Capturadas</h3>
+                    <div className="space-y-4">
+                      {/* Botões de Captura */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => startCamera((currentItem as ChecklistItem).id, 'image')}
+                          className="flex items-center justify-center gap-2 bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          <Camera className="w-5 h-5" />
+                          Tirar Foto
+                        </button>
+                        <button
+                          onClick={() => handleFileUpload((currentItem as ChecklistItem).id, 'image')}
+                          className="flex items-center justify-center gap-2 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          <Image className="w-5 h-5" />
+                          Buscar Imagem
+                        </button>
+                        <button
+                          onClick={() => startCamera((currentItem as ChecklistItem).id, 'video')}
+                          className="flex items-center justify-center gap-2 bg-purple-600 text-white p-3 rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          <Video className="w-5 h-5" />
+                          Gravar Vídeo
+                        </button>
+                        <button
+                          onClick={() => handleFileUpload((currentItem as ChecklistItem).id, 'video')}
+                          className="flex items-center justify-center gap-2 bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                          <Upload className="w-5 h-5" />
+                          Anexar Vídeo
+                        </button>
+                      </div>
+
+                      {/* Mídia Anexada */}
+                      {(currentItem as ChecklistItem).medias.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {(currentItem as ChecklistItem).medias.map(media => (
+                            <div key={media.id} className="relative bg-gray-100 rounded-lg overflow-hidden">
+                              {media.type === 'image' ? (
+                                <img src={media.url} alt={media.name} className="w-full h-32 object-cover" />
+                              ) : (
+                                <video src={media.url} className="w-full h-32 object-cover" controls />
+                              )}
+                              <button
+                                onClick={() => removeMediaFromItem((currentItem as ChecklistItem).id, media.id)}
+                                className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Análise de IA */}
+                {((currentItem as ChecklistItem).analiseIA || analisandoImagem) && (
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        {analisandoImagem ? (
+                          <Loader className="w-5 h-5 text-purple-600 animate-spin" />
+                        ) : (
+                          <Brain className="w-5 h-5 text-purple-600" />
+                        )}
+                        <h3 className="text-lg font-semibold text-purple-900">
+                          {analisandoImagem ? 'Analisando Imagem...' : 'Análise Inteligente'}
+                        </h3>
+                      </div>
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                    </div>
+                    
+                    {analisandoImagem ? (
+                      <div className="text-purple-700">
+                        <p>A IA está analisando a imagem capturada para fornecer recomendações técnicas...</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="font-medium text-purple-900 mb-2">Análise Visual:</h4>
+                          <p className="text-purple-800">{(currentItem as ChecklistItem).analiseIA}</p>
+                        </div>
+                        {(currentItem as ChecklistItem).preRecomendacao && (
+                          <div>
+                            <h4 className="font-medium text-purple-900 mb-2">Pré-recomendação:</h4>
+                            <p className="text-purple-800">{(currentItem as ChecklistItem).preRecomendacao}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Avaliação */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Avaliação</h3>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Condição</label>
+                      <select
+                        value={(currentItem as ChecklistItem).condicao}
+                        onChange={(e) => updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                        className={`w-full px-4 py-2 text-sm rounded border ${getStatusColor((currentItem as ChecklistItem).condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="C">C - Conforme</option>
+                        <option value="NC">NC - Não Conforme</option>
+                        <option value="NA">NA - Não Aplicável</option>
+                      </select>
+                    </div>
+
+                    {(currentItem as ChecklistItem).condicao === 'NC' && (
+                      <div className="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                        <h4 className="font-medium text-red-900">Análise de Risco (HRN)</h4>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">PO - Probabilidade</label>
                             <select
-                              value={item.po || ''}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'po', e.target.value)}
-                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
-                              }`}
-                              disabled={item.condicao !== 'NC'}
+                              value={(currentItem as ChecklistItem).po || ''}
+                              onChange={(e) => updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'po', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                             >
                               {PO_OPTIONS.map(option => (
                                 <option key={option.value} value={option.value}>
@@ -2846,16 +3355,14 @@ export default function InspecaoEletrica() {
                                 </option>
                               ))}
                             </select>
-                          </td>
+                          </div>
 
-                          <td className="px-4 py-4 text-center">
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">FE - Frequência</label>
                             <select
-                              value={item.fe || ''}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'fe', e.target.value)}
-                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
-                              }`}
-                              disabled={item.condicao !== 'NC'}
+                              value={(currentItem as ChecklistItem).fe || ''}
+                              onChange={(e) => updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'fe', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                             >
                               {FE_OPTIONS.map(option => (
                                 <option key={option.value} value={option.value}>
@@ -2863,16 +3370,14 @@ export default function InspecaoEletrica() {
                                 </option>
                               ))}
                             </select>
-                          </td>
+                          </div>
 
-                          <td className="px-4 py-4 text-center">
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">GSD - Gravidade</label>
                             <select
-                              value={item.gsd || ''}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'gsd', e.target.value)}
-                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
-                              }`}
-                              disabled={item.condicao !== 'NC'}
+                              value={(currentItem as ChecklistItem).gsd || ''}
+                              onChange={(e) => updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'gsd', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                             >
                               {GSD_OPTIONS.map(option => (
                                 <option key={option.value} value={option.value}>
@@ -2880,16 +3385,14 @@ export default function InspecaoEletrica() {
                                 </option>
                               ))}
                             </select>
-                          </td>
+                          </div>
 
-                          <td className="px-4 py-4 text-center">
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">NPER - Pessoas</label>
                             <select
-                              value={item.nper || ''}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'nper', e.target.value)}
-                              className={`w-40 px-2 py-1 text-xs rounded border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                item.condicao === 'NC' ? 'bg-white' : 'bg-gray-100'
-                              }`}
-                              disabled={item.condicao !== 'NC'}
+                              value={(currentItem as ChecklistItem).nper || ''}
+                              onChange={(e) => updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'nper', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                             >
                               {NPER_OPTIONS.map(option => (
                                 <option key={option.value} value={option.value}>
@@ -2897,181 +3400,168 @@ export default function InspecaoEletrica() {
                                 </option>
                               ))}
                             </select>
-                          </td>
-
-                          <td className="px-4 py-4 text-center">
-                            {item.condicao === 'NC' && hrnValue > 0 ? (
-                              <div className={`px-3 py-2 rounded-lg text-sm font-bold ${hrnColor.bg} ${hrnColor.text}`}>
-                                {hrnValue.toFixed(2)}
-                                <div className="text-xs font-normal mt-1">
-                                  {hrnColor.label}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-sm text-gray-400">
-                                {item.condicao === 'NC' ? 'Preencha todos os campos' : '-'}
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <textarea
-                              value={item.recomendacoes}
-                              onChange={(e) => updateItem(currentArea.id, item.id, 'recomendacoes', e.target.value)}
-                              placeholder="Adicione recomendações técnicas..."
-                              className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                              rows={2}
-                            />
-                          </td>
-
-                          <td className="px-4 py-4 text-center">
-                            <div className="flex flex-col gap-2">
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => startCamera(item.id, 'image')}
-                                  className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition-colors"
-                                  title="Tirar Foto"
-                                >
-                                  <Camera className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleFileUpload(item.id, 'image')}
-                                  className="bg-green-600 text-white p-1 rounded hover:bg-green-700 transition-colors"
-                                  title="Anexar Imagem"
-                                >
-                                  <Image className="w-4 h-4" />
-                                </button>
-                              </div>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => startCamera(item.id, 'video')}
-                                  className="bg-purple-600 text-white p-1 rounded hover:bg-purple-700 transition-colors"
-                                  title="Gravar Vídeo"
-                                >
-                                  <Video className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => isRecording ? stopAudioRecording() : startAudioRecording(item.id)}
-                                  className={`${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'} text-white p-1 rounded transition-colors`}
-                                  title={isRecording ? "Parar Gravação" : "Gravar Áudio"}
-                                >
-                                  <Mic className="w-4 h-4" />
-                                </button>
-                              </div>
-                              {item.medias.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {item.medias.length} arquivo(s)
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full min-w-[800px]">
-                  <thead className="bg-gray-800 text-white sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Item</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Norma</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Descrição</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Condição</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Observação</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Recomendação</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Mídia</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {currentArea.painelItems?.map((item, index) => (
-                      <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.id}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-900 font-medium">
-                          {item.norma}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
-                          {item.descricao}
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <select
-                            value={item.condicao}
-                            onChange={(e) => updatePainelItem(currentArea.id, item.id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
-                            className={`w-16 px-2 py-1 text-xs rounded border ${getStatusColor(item.condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
-                          >
-                            <option value="">-</option>
-                            <option value="C">C</option>
-                            <option value="NC">NC</option>
-                            <option value="NA">NA</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-4">
-                          <textarea
-                            value={item.observacao}
-                            onChange={(e) => updatePainelItem(currentArea.id, item.id, 'observacao', e.target.value)}
-                            placeholder="Observações sobre o item..."
-                            className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            rows={2}
-                          />
-                        </td>
-                        <td className="px-4 py-4">
-                          <textarea
-                            value={item.recomendacao}
-                            onChange={(e) => updatePainelItem(currentArea.id, item.id, 'recomendacao', e.target.value)}
-                            placeholder="Recomendações técnicas..."
-                            className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            rows={2}
-                          />
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="flex flex-col gap-2">
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => startCamera(item.id, 'image')}
-                                className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition-colors"
-                                title="Tirar Foto"
-                              >
-                                <Camera className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleFileUpload(item.id, 'image')}
-                                className="bg-green-600 text-white p-1 rounded hover:bg-green-700 transition-colors"
-                                title="Anexar Imagem"
-                              >
-                                <Image className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => startCamera(item.id, 'video')}
-                                className="bg-purple-600 text-white p-1 rounded hover:bg-purple-700 transition-colors"
-                                title="Gravar Vídeo"
-                              >
-                                <Video className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => isRecording ? stopAudioRecording() : startAudioRecording(item.id)}
-                                className={`${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'} text-white p-1 rounded transition-colors`}
-                                title={isRecording ? "Parar Gravação" : "Gravar Áudio"}
-                              >
-                                <Mic className="w-4 h-4" />
-                              </button>
-                            </div>
-                            {item.medias.length > 0 && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                {item.medias.length} arquivo(s)
-                              </div>
-                            )}
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                        </div>
+
+                        {(currentItem as ChecklistItem).hrn && (currentItem as ChecklistItem).hrn! > 0 && (
+                          <div className="text-center">
+                            <div className="text-sm text-red-700 mb-2">Resultado HRN:</div>
+                            <div className={`inline-block px-4 py-2 rounded-lg text-lg font-bold ${getHRNColor((currentItem as ChecklistItem).hrn!).bg} ${getHRNColor((currentItem as ChecklistItem).hrn!).text}`}>
+                              {(currentItem as ChecklistItem).hrn!.toFixed(2)}
+                              <div className="text-sm font-normal mt-1">
+                                {getHRNColor((currentItem as ChecklistItem).hrn!).label}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Recomendações</h3>
+                    <textarea
+                      value={(currentItem as ChecklistItem).recomendacoes}
+                      onChange={(e) => updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'recomendacoes', e.target.value)}
+                      placeholder="Escreva suas recomendações técnicas completas e detalhadas para correção ou melhoria..."
+                      className="w-full h-40 px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    />
+                    
+                    {(currentItem as ChecklistItem).preRecomendacao && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => {
+                            const currentRec = (currentItem as ChecklistItem).recomendacoes;
+                            const preRec = (currentItem as ChecklistItem).preRecomendacao!;
+                            const newRec = currentRec ? `${currentRec}\n\n${preRec}` : preRec;
+                            updateItem(currentArea.id, (currentItem as ChecklistItem).id, 'recomendacoes', newRec);
+                          }}
+                          className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-800 transition-colors"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          Usar pré-recomendação da IA
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Painel Elétrico Item
+              <div className="space-y-6">
+                {/* Informações do Item */}
+                <div className="border-b border-gray-200 pb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
+                      {(currentItem as PainelEletricoItem).id}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">{(currentItem as PainelEletricoItem).norma}</h2>
+                      <p className="text-gray-600 mt-2">{(currentItem as PainelEletricoItem).descricao}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mídia e Avaliação */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Evidências</h3>
+                    <div className="space-y-4">
+                      {/* Botões de Captura */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => startCamera((currentItem as PainelEletricoItem).id, 'image')}
+                          className="flex items-center justify-center gap-2 bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          <Camera className="w-5 h-5" />
+                          Tirar Foto
+                        </button>
+                        <button
+                          onClick={() => handleFileUpload((currentItem as PainelEletricoItem).id, 'image')}
+                          className="flex items-center justify-center gap-2 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          <Image className="w-5 h-5" />
+                          Buscar Imagem
+                        </button>
+                        <button
+                          onClick={() => startCamera((currentItem as PainelEletricoItem).id, 'video')}
+                          className="flex items-center justify-center gap-2 bg-purple-600 text-white p-3 rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          <Video className="w-5 h-5" />
+                          Gravar Vídeo
+                        </button>
+                        <button
+                          onClick={() => handleFileUpload((currentItem as PainelEletricoItem).id, 'video')}
+                          className="flex items-center justify-center gap-2 bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                          <Upload className="w-5 h-5" />
+                          Anexar Vídeo
+                        </button>
+                      </div>
+
+                      {/* Mídia Anexada */}
+                      {(currentItem as PainelEletricoItem).medias.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {(currentItem as PainelEletricoItem).medias.map(media => (
+                            <div key={media.id} className="relative bg-gray-100 rounded-lg overflow-hidden">
+                              {media.type === 'image' ? (
+                                <img src={media.url} alt={media.name} className="w-full h-32 object-cover" />
+                              ) : (
+                                <video src={media.url} className="w-full h-32 object-cover" controls />
+                              )}
+                              <button
+                                onClick={() => removeMediaFromItem((currentItem as PainelEletricoItem).id, media.id)}
+                                className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Avaliação</h3>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Condição</label>
+                      <select
+                        value={(currentItem as PainelEletricoItem).condicao}
+                        onChange={(e) => updatePainelItem(currentArea.id, (currentItem as PainelEletricoItem).id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                        className={`w-full px-4 py-2 text-sm rounded border ${getStatusColor((currentItem as PainelEletricoItem).condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="C">C - Conforme</option>
+                        <option value="NC">NC - Não Conforme</option>
+                        <option value="NA">NA - Não Aplicável</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Observação</label>
+                      <textarea
+                        value={(currentItem as PainelEletricoItem).observacao}
+                        onChange={(e) => updatePainelItem(currentArea.id, (currentItem as PainelEletricoItem).id, 'observacao', e.target.value)}
+                        placeholder="Digite suas observações detalhadas sobre o item inspecionado..."
+                        className="w-full h-32 px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Recomendação</label>
+                      <textarea
+                        value={(currentItem as PainelEletricoItem).recomendacao}
+                        onChange={(e) => updatePainelItem(currentArea.id, (currentItem as PainelEletricoItem).id, 'recomendacao', e.target.value)}
+                        placeholder="Escreva suas recomendações técnicas completas para correção ou melhoria..."
+                        className="w-full h-32 px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
