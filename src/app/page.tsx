@@ -299,15 +299,25 @@ const checklistItems: Omit<ChecklistItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'np
 
 const painelEletricoItems: Omit<PainelEletricoItem, 'condicao' | 'observacao' | 'recomendacao' | 'medias' | 'selected'>[] = [
   { id: 1, norma: "NBR 5410", descricao: "O painel está identificado: Possui TAG, Etiqueta com nível de tensão, Advertência quanto aos riscos elétricos." },
-  { id: 2, norma: "NBR 5410", descricao: "O painel possui chave para bloqueio elétrico?" },
+  { id: 2, norma: "NR-10", descricao: "O painel possui chave para bloqueio elétrico?" },
   { id: 3, norma: "NR-10", descricao: "Existe sinalização restringindo o acesso a pessoas não autorizados?" },
   { id: 4, norma: "NBR 5410", descricao: "O painel esta protegido contra entrada de animais?" },
   { id: 5, norma: "NBR 5410", descricao: "O painel possui diagrama elétrico?" },
-  { id: 6, norma: "NBR 5410", descricao: "Os condutores estão identificados conforme a norma?" },
-  { id: 7, norma: "NBR 5410", descricao: "Existe proteção contra sobrecorrente adequada?" },
-  { id: 8, norma: "NBR 5410", descricao: "O aterramento está adequado e funcional?" },
-  { id: 9, norma: "NR-10", descricao: "Existe dispositivo de proteção diferencial residual?" },
-  { id: 10, norma: "NBR 5410", descricao: "As conexões estão firmes e sem aquecimento?" }
+  { id: 6, norma: "NR-10", descricao: "O painel possui botoeira de emergência?" },
+  { id: 7, norma: "NBR 5410", descricao: "O painel possui proteção contra intempéries (chuva, sol)?" },
+  { id: 8, norma: "NR-10", descricao: "O painel está trancado, impedindo acesso a pessoas não autorizados?" },
+  { id: 9, norma: "NBR 5410", descricao: "O painel possui disjuntor DR?" },
+  { id: 10, norma: "NBR 5410", descricao: "O painel está limpo e a fiação organizada nas canaletas?" },
+  { id: 11, norma: "NBR 5410", descricao: "O painel possui iluminação?" },
+  { id: 12, norma: "NBR 5410", descricao: "O painel está livre de qualquer objeto no seu interior?" },
+  { id: 13, norma: "NR-10", descricao: "As partes vivas estão protegidas contra contato acidental?" },
+  { id: 14, norma: "NBR 5410", descricao: "Os cabos, disjuntores e chaves estão identificados?" },
+  { id: 15, norma: "NBR 5410", descricao: "No painel existe identificação dos circuitos?" },
+  { id: 16, norma: "NBR 5410", descricao: "O painel e porta possuem aterramento?" },
+  { id: 17, norma: "NR-17", descricao: "O painel está a uma altura ergonômica?" },
+  { id: 18, norma: "NR-10", descricao: "O acesso ao painel está livre de obstáculos?" },
+  { id: 19, norma: "NBR 5410", descricao: "As cores dos cabos estão dentro do padrão?" },
+  { id: 20, norma: "NBR 5410", descricao: "As tomadas externas estão identificadas?" }
 ];
 
 export default function InspecaoEletrica() {
@@ -1004,7 +1014,7 @@ export default function InspecaoEletrica() {
     setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
   };
 
-  // CORREÇÃO 1: Função de geolocalização corrigida com melhor tratamento de erros
+  // Função de geolocalização corrigida com melhor tratamento de erros
   const obterLocalizacao = () => {
     setLoadingLocation(true);
     setLocationError(null);
@@ -1065,24 +1075,8 @@ export default function InspecaoEletrica() {
   };
 
   const createNewInspecao = () => {
-    // CORREÇÃO: Validação com mínimo de 30 caracteres para cada campo
-    if (!novaInspecao.nome || novaInspecao.nome.length < 30) {
-      alert('Nome do cliente deve ter pelo menos 30 caracteres');
-      return;
-    }
-    
-    if (!novaInspecao.numeroContrato || novaInspecao.numeroContrato.length < 30) {
-      alert('Número do contrato deve ter pelo menos 30 caracteres');
-      return;
-    }
-    
-    if (!novaInspecao.engenheiroResponsavel || novaInspecao.engenheiroResponsavel.length < 30) {
-      alert('Engenheiro responsável deve ter pelo menos 30 caracteres');
-      return;
-    }
-    
-    if (!novaInspecao.responsavelCliente || novaInspecao.responsavelCliente.length < 30) {
-      alert('Responsável do cliente deve ter pelo menos 30 caracteres');
+    if (!novaInspecao.nome || !novaInspecao.numeroContrato || !novaInspecao.engenheiroResponsavel || !novaInspecao.responsavelCliente) {
+      alert('Por favor, preencha todos os campos obrigatórios');
       return;
     }
 
@@ -1190,7 +1184,7 @@ export default function InspecaoEletrica() {
     alert(`Área "${novaArea}" criada com sucesso!`);
   };
 
-  // CORREÇÃO 2: Função updateItem corrigida para atualização imediata
+  // Função updateItem corrigida para atualização imediata
   const updateItem = (areaId: string, itemId: number, field: keyof ChecklistItem, value: any) => {
     if (!currentInspecao) return;
 
@@ -1243,7 +1237,7 @@ export default function InspecaoEletrica() {
     }
   };
 
-  // CORREÇÃO 3: Função updatePainelItem corrigida para permitir escrita completa
+  // Função updatePainelItem corrigida para permitir escrita completa
   const updatePainelItem = (areaId: string, itemId: number, field: keyof PainelEletricoItem, value: any) => {
     if (!currentInspecao) return;
 
@@ -2757,70 +2751,54 @@ export default function InspecaoEletrica() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome do Cliente * (mínimo 30 caracteres)
+                  Nome do Cliente *
                 </label>
                 <input
                   type="text"
                   value={novaInspecao.nome}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, nome: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ex: Empresa ABC Ltda - Razão Social Completa com CNPJ e Endereço"
-                  minLength={30}
+                  placeholder="Ex: Empresa ABC Ltda"
                 />
-                <div className="text-xs text-gray-500 mt-1">
-                  {novaInspecao.nome.length}/30 caracteres mínimos
-                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Número do Contrato * (mínimo 30 caracteres)
+                  Número do Contrato *
                 </label>
                 <input
                   type="text"
                   value={novaInspecao.numeroContrato}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, numeroContrato: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ex: CT-2024-001 - Contrato de Inspeção Elétrica NR-10 Completa"
-                  minLength={30}
+                  placeholder="Ex: CT-2024-001"
                 />
-                <div className="text-xs text-gray-500 mt-1">
-                  {novaInspecao.numeroContrato.length}/30 caracteres mínimos
-                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Engenheiro Responsável * (mínimo 30 caracteres)
+                  Engenheiro Responsável *
                 </label>
                 <input
                   type="text"
                   value={novaInspecao.engenheiroResponsavel}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, engenheiroResponsavel: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ex: João Silva - CREA 123456 - Engenheiro Eletricista Especialista"
-                  minLength={30}
+                  placeholder="Ex: João Silva - CREA 123456"
                 />
-                <div className="text-xs text-gray-500 mt-1">
-                  {novaInspecao.engenheiroResponsavel.length}/30 caracteres mínimos
-                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Responsável do Cliente * (mínimo 30 caracteres)
+                  Responsável do Cliente *
                 </label>
                 <input
                   type="text"
                   value={novaInspecao.responsavelCliente}
                   onChange={(e) => setNovaInspecao(prev => ({ ...prev, responsavelCliente: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ex: Maria Santos - Gerente de Manutenção - Responsável Técnico"
-                  minLength={30}
+                  placeholder="Ex: Maria Santos - Gerente de Manutenção"
                 />
-                <div className="text-xs text-gray-500 mt-1">
-                  {novaInspecao.responsavelCliente.length}/30 caracteres mínimos
-                </div>
               </div>
 
               <div>
