@@ -52,12 +52,30 @@ interface PainelEletricoItem {
   selected: boolean;
 }
 
+interface DocumentoItem {
+  id: number;
+  norma: string;
+  descricao: string;
+  condicao: 'C' | 'NC' | 'NA' | '';
+  po: string;
+  fe: string;
+  gsd: string;
+  nper: string;
+  recomendacoes: string;
+  medias: MediaFile[];
+  selected: boolean;
+  hrn?: number;
+  preRecomendacao?: string;
+  analiseIA?: string;
+}
+
 interface Area {
   id: string;
   nome: string;
   items: ChecklistItem[];
   painelItems?: PainelEletricoItem[];
-  tipoChecklist: 'subestacoes' | 'paineis';
+  documentoItems?: DocumentoItem[];
+  tipoChecklist: 'subestacoes' | 'paineis' | 'documentos';
   hrnTotal?: number;
 }
 
@@ -320,6 +338,10 @@ const painelEletricoItems: Omit<PainelEletricoItem, 'condicao' | 'observacao' | 
   { id: 20, norma: "NBR 5410", descricao: "As tomadas externas estão identificadas?" }
 ];
 
+const documentoItems: Omit<DocumentoItem, 'condicao' | 'po' | 'fe' | 'gsd' | 'nper' | 'recomendacoes' | 'medias' | 'selected' | 'hrn' | 'preRecomendacao' | 'analiseIA'>[] = [
+  { id: 1, norma: "10.11.2", descricao: "Os serviços em instalações elétricas devem ser precedidos de ordens de serviço especificas, aprovadas por trabalhador autorizado, contendo, no mínimo, o tipo, a data, o local e as referências aos procedimentos de trabalho a serem adotados. Ver OS de baixa tensão e de Alta tensão." }
+];
+
 export default function InspecaoEletrica() {
   const [currentView, setCurrentView] = useState<'home' | 'nova-inspecao' | 'inspecao' | 'checklist' | 'dashboard' | 'configuracoes' | 'relatorios' | 'gerenciar-imagens' | 'editor-imagens'>('home');
   const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
@@ -362,7 +384,7 @@ export default function InspecaoEletrica() {
 
   const [novaArea, setNovaArea] = useState('');
   const [showNovaAreaForm, setShowNovaAreaForm] = useState(false);
-  const [tipoChecklistSelecionado, setTipoChecklistSelecionado] = useState<'subestacoes' | 'paineis'>('subestacoes');
+  const [tipoChecklistSelecionado, setTipoChecklistSelecionado] = useState<'subestacoes' | 'paineis' | 'documentos'>('subestacoes');
 
   // Estados para foto do cliente
   const [fotoClienteMetodo, setFotoClienteMetodo] = useState<'link' | 'upload'>('link');
@@ -444,7 +466,7 @@ export default function InspecaoEletrica() {
   const [newImageUrl, setNewImageUrl] = useState('');
 
   // Função para analisar imagem com IA
-  const analisarImagemComIA = async (imagemUrl: string, item: ChecklistItem) => {
+  const analisarImagemComIA = async (imagemUrl: string, item: ChecklistItem | DocumentoItem) => {
     setAnalisandoImagem(true);
     try {
       // Simular análise de IA (em produção, seria uma chamada para API de IA)
@@ -463,14 +485,22 @@ export default function InspecaoEletrica() {
       } else if (item.norma.includes('10.4.2')) {
         analise = 'Sistema de prevenção contra incêndios observado. Extintores e detectores de fumaça presentes.';
         preRecomendacao = 'Verificar validade dos extintores e funcionamento dos detectores de fumaça.';
+      } else if (item.norma.includes('10.11.2')) {
+        analise = 'Documentação de ordem de serviço analisada. Verificação de conformidade com requisitos da NR-10.';
+        preRecomendacao = 'Verificar se a OS contém todos os elementos obrigatórios: tipo, data, local, referências aos procedimentos, aprovação por trabalhador autorizado.';
       } else {
         analise = 'Análise visual realizada. Equipamentos e instalações aparentam estar em conformidade básica.';
         preRecomendacao = 'Realizar inspeção detalhada conforme procedimentos técnicos específicos da norma.';
       }
 
       // Atualizar o item com a análise
-      updateItem(currentArea!.id, item.id, 'analiseIA', analise);
-      updateItem(currentArea!.id, item.id, 'preRecomendacao', preRecomendacao);
+      if (currentArea?.tipoChecklist === 'subestacoes') {
+        updateItem(currentArea!.id, item.id, 'analiseIA', analise);
+        updateItem(currentArea!.id, item.id, 'preRecomendacao', preRecomendacao);
+      } else if (currentArea?.tipoChecklist === 'documentos') {
+        updateDocumentoItem(currentArea!.id, item.id, 'analiseIA', analise);
+        updateDocumentoItem(currentArea!.id, item.id, 'preRecomendacao', preRecomendacao);
+      }
       
     } catch (error) {
       console.error('Erro na análise de IA:', error);
@@ -647,7 +677,19 @@ export default function InspecaoEletrica() {
 
     inspecoes.forEach(inspecao => {
       inspecao.areas.forEach(area => {
+        // Contar itens NC de subestações
         area.items.forEach(item => {
+          if (item.condicao === 'NC') {
+            totalItensNC++;
+            if (item.hrn && item.hrn > 0) {
+              totalHrn += item.hrn;
+              totalItensComHrn++;
+            }
+          }
+        });
+        
+        // Contar itens NC de documentos
+        area.documentoItems?.forEach(item => {
           if (item.condicao === 'NC') {
             totalItensNC++;
             if (item.hrn && item.hrn > 0) {
@@ -976,6 +1018,11 @@ export default function InspecaoEletrica() {
                 item.id === itemId 
                   ? { ...item, medias: [...item.medias, mediaFile] }
                   : item
+              ),
+              documentoItems: area.documentoItems?.map(item => 
+                item.id === itemId 
+                  ? { ...item, medias: [...item.medias, mediaFile] }
+                  : item
               )
             }
           : area
@@ -1001,6 +1048,11 @@ export default function InspecaoEletrica() {
                   : item
               ),
               painelItems: area.painelItems?.map(item => 
+                item.id === itemId 
+                  ? { ...item, medias: item.medias.filter(m => m.id !== mediaId) }
+                  : item
+              ),
+              documentoItems: area.documentoItems?.map(item => 
                 item.id === itemId 
                   ? { ...item, medias: item.medias.filter(m => m.id !== mediaId) }
                   : item
@@ -1129,6 +1181,7 @@ export default function InspecaoEletrica() {
 
     let checklistCompleto: ChecklistItem[] = [];
     let painelItems: PainelEletricoItem[] = [];
+    let documentoItems: DocumentoItem[] = [];
 
     if (tipoChecklistSelecionado === 'subestacoes') {
       checklistCompleto = checklistItems.map(item => ({
@@ -1149,7 +1202,7 @@ export default function InspecaoEletrica() {
         preRecomendacao: '',
         analiseIA: ''
       }));
-    } else {
+    } else if (tipoChecklistSelecionado === 'paineis') {
       painelItems = painelEletricoItems.map(item => ({
         id: item.id,
         norma: item.norma,
@@ -1160,6 +1213,23 @@ export default function InspecaoEletrica() {
         medias: [],
         selected: true
       }));
+    } else if (tipoChecklistSelecionado === 'documentos') {
+      documentoItems = documentoItems.map(item => ({
+        id: item.id,
+        norma: item.norma,
+        descricao: item.descricao,
+        condicao: '',
+        po: '',
+        fe: '',
+        gsd: '',
+        nper: '',
+        recomendacoes: '',
+        medias: [],
+        selected: true,
+        hrn: 0,
+        preRecomendacao: '',
+        analiseIA: ''
+      }));
     }
 
     const area: Area = {
@@ -1167,6 +1237,7 @@ export default function InspecaoEletrica() {
       nome: novaArea,
       items: checklistCompleto,
       painelItems: painelItems,
+      documentoItems: documentoItems,
       tipoChecklist: tipoChecklistSelecionado,
       hrnTotal: 0
     };
@@ -1218,7 +1289,8 @@ export default function InspecaoEletrica() {
     // Recalcular HRN total da área
     const areaAtualizada = updatedInspecao.areas.find(a => a.id === areaId);
     if (areaAtualizada) {
-      areaAtualizada.hrnTotal = areaAtualizada.items.reduce((total, item) => total + (item.hrn || 0), 0);
+      areaAtualizada.hrnTotal = areaAtualizada.items.reduce((total, item) => total + (item.hrn || 0), 0) +
+                                (areaAtualizada.documentoItems?.reduce((total, item) => total + (item.hrn || 0), 0) || 0);
     }
 
     // Recalcular HRN total do cliente
@@ -1268,6 +1340,60 @@ export default function InspecaoEletrica() {
     }
   };
 
+  // Nova função updateDocumentoItem
+  const updateDocumentoItem = (areaId: string, itemId: number, field: keyof DocumentoItem, value: any) => {
+    if (!currentInspecao) return;
+
+    const updatedInspecao = {
+      ...currentInspecao,
+      areas: currentInspecao.areas.map(area => 
+        area.id === areaId 
+          ? {
+              ...area,
+              documentoItems: area.documentoItems?.map(item => {
+                if (item.id === itemId) {
+                  const updatedItem = { ...item, [field]: value };
+                  
+                  // Recalcular HRN se for NC e todos os campos estiverem preenchidos
+                  if (updatedItem.condicao === 'NC' && updatedItem.po && updatedItem.fe && updatedItem.gsd && updatedItem.nper) {
+                    updatedItem.hrn = calcularHRN(updatedItem.po, updatedItem.fe, updatedItem.gsd, updatedItem.nper);
+                  } else {
+                    updatedItem.hrn = 0;
+                  }
+                  
+                  return updatedItem;
+                } else {
+                  return item;
+                }
+              })
+            }
+          : area
+      )
+    };
+
+    // Recalcular HRN total da área
+    const areaAtualizada = updatedInspecao.areas.find(a => a.id === areaId);
+    if (areaAtualizada) {
+      areaAtualizada.hrnTotal = areaAtualizada.items.reduce((total, item) => total + (item.hrn || 0), 0) +
+                                (areaAtualizada.documentoItems?.reduce((total, item) => total + (item.hrn || 0), 0) || 0);
+    }
+
+    // Recalcular HRN total do cliente
+    updatedInspecao.hrnTotalCliente = updatedInspecao.areas.reduce((total, area) => total + (area.hrnTotal || 0), 0);
+
+    // Atualizar estados imediatamente
+    setCurrentInspecao(updatedInspecao);
+    setInspecoes(prev => prev.map(i => i.id === currentInspecao.id ? updatedInspecao : i));
+    
+    // Atualizar área atual se for a mesma
+    if (currentArea && currentArea.id === areaId) {
+      const updatedArea = updatedInspecao.areas.find(a => a.id === areaId);
+      if (updatedArea) {
+        setCurrentArea(updatedArea);
+      }
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'C': return 'bg-green-100 text-green-800';
@@ -1293,18 +1419,27 @@ export default function InspecaoEletrica() {
     
     if (currentArea.tipoChecklist === 'subestacoes') {
       return currentArea.items[currentItemIndex] || null;
-    } else {
+    } else if (currentArea.tipoChecklist === 'paineis') {
       return currentArea.painelItems?.[currentItemIndex] || null;
+    } else if (currentArea.tipoChecklist === 'documentos') {
+      return currentArea.documentoItems?.[currentItemIndex] || null;
     }
+    
+    return null;
   };
 
   // Função para navegar entre itens
   const navigateToItem = (direction: 'prev' | 'next') => {
     if (!currentArea) return;
     
-    const totalItems = currentArea.tipoChecklist === 'subestacoes' 
-      ? currentArea.items.length 
-      : currentArea.painelItems?.length || 0;
+    let totalItems = 0;
+    if (currentArea.tipoChecklist === 'subestacoes') {
+      totalItems = currentArea.items.length;
+    } else if (currentArea.tipoChecklist === 'paineis') {
+      totalItems = currentArea.painelItems?.length || 0;
+    } else if (currentArea.tipoChecklist === 'documentos') {
+      totalItems = currentArea.documentoItems?.length || 0;
+    }
     
     if (direction === 'prev' && currentItemIndex > 0) {
       setCurrentItemIndex(currentItemIndex - 1);
@@ -1814,7 +1949,8 @@ export default function InspecaoEletrica() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {inspecoes.map(inspecao => {
                     const itensNC = inspecao.areas.reduce((total, area) => 
-                      total + area.items.filter(item => item.condicao === 'NC').length, 0
+                      total + area.items.filter(item => item.condicao === 'NC').length +
+                      (area.documentoItems?.filter(item => item.condicao === 'NC').length || 0), 0
                     );
                     const hrnTotal = inspecao.hrnTotalCliente || 0;
                     const hrnColor = getHRNColor(hrnTotal);
@@ -3038,11 +3174,12 @@ export default function InspecaoEletrica() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Checklist</label>
                   <select
                     value={tipoChecklistSelecionado}
-                    onChange={(e) => setTipoChecklistSelecionado(e.target.value as 'subestacoes' | 'paineis')}
+                    onChange={(e) => setTipoChecklistSelecionado(e.target.value as 'subestacoes' | 'paineis' | 'documentos')}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="subestacoes">Subestações (com HRN)</option>
                     <option value="paineis">Painéis Elétricos</option>
+                    <option value="documentos">Checklist Documentos (com HRN)</option>
                   </select>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -3071,14 +3208,21 @@ export default function InspecaoEletrica() {
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="font-semibold text-gray-900">{area.nome}</h3>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      area.tipoChecklist === 'subestacoes' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                      area.tipoChecklist === 'subestacoes' ? 'bg-blue-100 text-blue-800' : 
+                      area.tipoChecklist === 'paineis' ? 'bg-green-100 text-green-800' :
+                      'bg-orange-100 text-orange-800'
                     }`}>
-                      {area.tipoChecklist === 'subestacoes' ? 'Subestação' : 'Painel'}
+                      {area.tipoChecklist === 'subestacoes' ? 'Subestação' : 
+                       area.tipoChecklist === 'paineis' ? 'Painel' : 'Documentos'}
                     </span>
                   </div>
                   <div className="text-sm text-gray-600 mb-3">
-                    <div>Total: {area.tipoChecklist === 'subestacoes' ? area.items.length : area.painelItems?.length || 0} itens</div>
-                    {area.tipoChecklist === 'subestacoes' && area.hrnTotal && area.hrnTotal > 0 && (
+                    <div>Total: {
+                      area.tipoChecklist === 'subestacoes' ? area.items.length : 
+                      area.tipoChecklist === 'paineis' ? area.painelItems?.length || 0 :
+                      area.documentoItems?.length || 0
+                    } itens</div>
+                    {(area.tipoChecklist === 'subestacoes' || area.tipoChecklist === 'documentos') && area.hrnTotal && area.hrnTotal > 0 && (
                       <div className="mt-2">
                         <span className="text-xs text-gray-500">HRN da Área:</span>
                         <div className={`inline-block ml-2 px-2 py-1 rounded text-xs font-bold ${getHRNColor(area.hrnTotal).bg} ${getHRNColor(area.hrnTotal).text}`}>
@@ -3116,9 +3260,14 @@ export default function InspecaoEletrica() {
 
   if (currentView === 'checklist' && currentArea && currentInspecao) {
     const currentItem = getCurrentItem();
-    const totalItems = currentArea.tipoChecklist === 'subestacoes' 
-      ? currentArea.items.length 
-      : currentArea.painelItems?.length || 0;
+    let totalItems = 0;
+    if (currentArea.tipoChecklist === 'subestacoes') {
+      totalItems = currentArea.items.length;
+    } else if (currentArea.tipoChecklist === 'paineis') {
+      totalItems = currentArea.painelItems?.length || 0;
+    } else if (currentArea.tipoChecklist === 'documentos') {
+      totalItems = currentArea.documentoItems?.length || 0;
+    }
 
     if (!currentItem) {
       return (
@@ -3158,7 +3307,9 @@ export default function InspecaoEletrica() {
                     {currentArea.nome} - {currentInspecao.nome}
                   </h1>
                   <p className="text-gray-600 text-sm sm:text-base">
-                    {currentArea.tipoChecklist === 'subestacoes' ? 'Checklist com HRN' : 'Checklist de Painéis'}
+                    {currentArea.tipoChecklist === 'subestacoes' ? 'Checklist com HRN' : 
+                     currentArea.tipoChecklist === 'paineis' ? 'Checklist de Painéis' :
+                     'Checklist Documentos com HRN'}
                   </p>
                 </div>
               </div>
@@ -3460,7 +3611,7 @@ export default function InspecaoEletrica() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : currentArea.tipoChecklist === 'paineis' ? (
               // Painel Elétrico Item
               <div className="space-y-6">
                 {/* Informações do Item */}
@@ -3573,6 +3724,248 @@ export default function InspecaoEletrica() {
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+            ) : (
+              // Documento Item
+              <div className="space-y-6">
+                {/* Informações do Item */}
+                <div className="border-b border-gray-200 pb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-orange-600 text-white rounded-full flex items-center justify-center font-bold">
+                      {(currentItem as DocumentoItem).id}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">{(currentItem as DocumentoItem).norma}</h2>
+                      <p className="text-gray-600 mt-2">{(currentItem as DocumentoItem).descricao}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mídia Capturada */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Evidências Documentais</h3>
+                    <div className="space-y-4">
+                      {/* Botões de Captura */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => startCamera((currentItem as DocumentoItem).id, 'image')}
+                          className="flex items-center justify-center gap-2 bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          <Camera className="w-5 h-5" />
+                          Tirar Foto
+                        </button>
+                        <button
+                          onClick={() => handleFileUpload((currentItem as DocumentoItem).id, 'image')}
+                          className="flex items-center justify-center gap-2 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          <Image className="w-5 h-5" />
+                          Buscar Imagem
+                        </button>
+                        <button
+                          onClick={() => startCamera((currentItem as DocumentoItem).id, 'video')}
+                          className="flex items-center justify-center gap-2 bg-purple-600 text-white p-3 rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          <Video className="w-5 h-5" />
+                          Gravar Vídeo
+                        </button>
+                        <button
+                          onClick={() => handleFileUpload((currentItem as DocumentoItem).id, 'video')}
+                          className="flex items-center justify-center gap-2 bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                          <Upload className="w-5 h-5" />
+                          Anexar Vídeo
+                        </button>
+                      </div>
+
+                      {/* Mídia Anexada */}
+                      {(currentItem as DocumentoItem).medias.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {(currentItem as DocumentoItem).medias.map(media => (
+                            <div key={media.id} className="relative bg-gray-100 rounded-lg overflow-hidden">
+                              {media.type === 'image' ? (
+                                <img src={media.url} alt={media.name} className="w-full h-32 object-cover" />
+                              ) : (
+                                <video src={media.url} className="w-full h-32 object-cover" controls />
+                              )}
+                              <button
+                                onClick={() => removeMediaFromItem((currentItem as DocumentoItem).id, media.id)}
+                                className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full hover:bg-red-700 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Avaliação */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Avaliação</h3>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Condição</label>
+                      <select
+                        value={(currentItem as DocumentoItem).condicao}
+                        onChange={(e) => updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'condicao', e.target.value as 'C' | 'NC' | 'NA' | '')}
+                        className={`w-full px-4 py-2 text-sm rounded border ${getStatusColor((currentItem as DocumentoItem).condicao)} border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white`}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="C">C - Conforme</option>
+                        <option value="NC">NC - Não Conforme</option>
+                        <option value="NA">NA - Não Aplicável</option>
+                      </select>
+                    </div>
+
+                    {(currentItem as DocumentoItem).condicao === 'NC' && (
+                      <div className="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                        <h4 className="font-medium text-red-900">Análise de Risco (HRN)</h4>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">PO - Probabilidade</label>
+                            <select
+                              value={(currentItem as DocumentoItem).po || ''}
+                              onChange={(e) => updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'po', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                            >
+                              {PO_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">FE - Frequência</label>
+                            <select
+                              value={(currentItem as DocumentoItem).fe || ''}
+                              onChange={(e) => updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'fe', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                            >
+                              {FE_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">GSD - Gravidade</label>
+                            <select
+                              value={(currentItem as DocumentoItem).gsd || ''}
+                              onChange={(e) => updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'gsd', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                            >
+                              {GSD_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-1">NPER - Pessoas</label>
+                            <select
+                              value={(currentItem as DocumentoItem).nper || ''}
+                              onChange={(e) => updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'nper', e.target.value)}
+                              className="w-full px-3 py-2 text-sm rounded border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                            >
+                              {NPER_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {(currentItem as DocumentoItem).hrn && (currentItem as DocumentoItem).hrn! > 0 && (
+                          <div className="text-center">
+                            <div className="text-sm text-red-700 mb-2">Resultado HRN:</div>
+                            <div className={`inline-block px-4 py-2 rounded-lg text-lg font-bold ${getHRNColor((currentItem as DocumentoItem).hrn!).bg} ${getHRNColor((currentItem as DocumentoItem).hrn!).text}`}>
+                              {(currentItem as DocumentoItem).hrn!.toFixed(2)}
+                              <div className="text-sm font-normal mt-1">
+                                {getHRNColor((currentItem as DocumentoItem).hrn!).label}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Análise de IA */}
+                {((currentItem as DocumentoItem).analiseIA || analisandoImagem) && (
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        {analisandoImagem ? (
+                          <Loader className="w-5 h-5 text-purple-600 animate-spin" />
+                        ) : (
+                          <Brain className="w-5 h-5 text-purple-600" />
+                        )}
+                        <h3 className="text-lg font-semibold text-purple-900">
+                          {analisandoImagem ? 'Analisando Documento...' : 'Análise Inteligente'}
+                        </h3>
+                      </div>
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                    </div>
+                    
+                    {analisandoImagem ? (
+                      <div className="text-purple-700">
+                        <p>A IA está analisando o documento capturado para fornecer recomendações técnicas...</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="font-medium text-purple-900 mb-2">Análise Documental:</h4>
+                          <p className="text-purple-800">{(currentItem as DocumentoItem).analiseIA}</p>
+                        </div>
+                        {(currentItem as DocumentoItem).preRecomendacao && (
+                          <div>
+                            <h4 className="font-medium text-purple-900 mb-2">Pré-recomendação:</h4>
+                            <p className="text-purple-800">{(currentItem as DocumentoItem).preRecomendacao}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Recomendações */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Recomendações</h3>
+                  <textarea
+                    value={(currentItem as DocumentoItem).recomendacoes}
+                    onChange={(e) => updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'recomendacoes', e.target.value)}
+                    placeholder="Escreva suas recomendações técnicas completas e detalhadas para correção ou melhoria da documentação..."
+                    className="w-full h-40 px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                  
+                  {(currentItem as DocumentoItem).preRecomendacao && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => {
+                          const currentRec = (currentItem as DocumentoItem).recomendacoes;
+                          const preRec = (currentItem as DocumentoItem).preRecomendacao!;
+                          const newRec = currentRec ? `${currentRec}\n\n${preRec}` : preRec;
+                          updateDocumentoItem(currentArea.id, (currentItem as DocumentoItem).id, 'recomendacoes', newRec);
+                        }}
+                        className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-800 transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Usar pré-recomendação da IA
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
